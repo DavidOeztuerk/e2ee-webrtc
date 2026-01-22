@@ -157,7 +157,7 @@ export class KeyManager {
    * @param key - The CryptoKey to set
    * @param generation - The generation number
    */
-  async setKey(key: CryptoKey, generation: KeyGeneration): Promise<void> {
+  setKey(key: CryptoKey, generation: KeyGeneration): void {
     this.ensureNotDestroyed();
 
     // Move current to previous
@@ -218,11 +218,7 @@ export class KeyManager {
    */
   async exportCurrentKey(): Promise<Uint8Array> {
     if (!this.state.currentKey) {
-      throw new E2EEError(
-        E2EEErrorCode.KEY_NOT_FOUND,
-        'No current key to export',
-        false
-      );
+      throw new E2EEError(E2EEErrorCode.KEY_NOT_FOUND, 'No current key to export', false);
     }
 
     return exportKey(this.state.currentKey);
@@ -236,7 +232,7 @@ export class KeyManager {
    */
   async importKey(keyData: Uint8Array, generation: KeyGeneration): Promise<void> {
     const key = await importKey(keyData);
-    await this.setKey(key, generation);
+    this.setKey(key, generation);
   }
 
   /**
@@ -247,11 +243,7 @@ export class KeyManager {
    */
   async getCurrentKeyFingerprint(): Promise<Uint8Array> {
     if (!this.state.currentKey) {
-      throw new E2EEError(
-        E2EEErrorCode.KEY_NOT_FOUND,
-        'No current key for fingerprint',
-        false
-      );
+      throw new E2EEError(E2EEErrorCode.KEY_NOT_FOUND, 'No current key for fingerprint', false);
     }
 
     const keyBytes = await exportKey(this.state.currentKey);
@@ -350,7 +342,7 @@ export class KeyManager {
 
   private nextGeneration(): KeyGeneration {
     // Wrap at 255 (single byte)
-    return ((this.state.currentGeneration + 1) & 0xff) as KeyGeneration;
+    return (this.state.currentGeneration + 1) & 0xff;
   }
 
   private addToHistory(key: CryptoKey, generation: KeyGeneration): void {
@@ -395,11 +387,7 @@ export class KeyManager {
 
   private ensureNotDestroyed(): void {
     if (this.destroyed) {
-      throw new E2EEError(
-        E2EEErrorCode.UNKNOWN_ERROR,
-        'KeyManager has been destroyed',
-        false
-      );
+      throw new E2EEError(E2EEErrorCode.UNKNOWN_ERROR, 'KeyManager has been destroyed', false);
     }
   }
 }

@@ -141,11 +141,10 @@ describe('Key Manager Module', () => {
   // =========================================================================
   describe('setKey', () => {
     it('should set a key with specific generation', async () => {
-      const mockKey = await crypto.subtle.generateKey(
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-      );
+      const mockKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+        'encrypt',
+        'decrypt',
+      ]);
 
       await keyManager.setKey(mockKey as CryptoKey, 42);
 
@@ -155,17 +154,15 @@ describe('Key Manager Module', () => {
     });
 
     it('should move current key to previous when setting new key', async () => {
-      const key1 = await crypto.subtle.generateKey(
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-      ) as CryptoKey;
+      const key1 = (await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+        'encrypt',
+        'decrypt',
+      ])) as CryptoKey;
 
-      const key2 = await crypto.subtle.generateKey(
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-      ) as CryptoKey;
+      const key2 = (await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+        'encrypt',
+        'decrypt',
+      ])) as CryptoKey;
 
       await keyManager.setKey(key1, 1);
       const state1 = keyManager.getState();
@@ -178,11 +175,10 @@ describe('Key Manager Module', () => {
     });
 
     it('should add key to history', async () => {
-      const mockKey = await crypto.subtle.generateKey(
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-      ) as CryptoKey;
+      const mockKey = (await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+        'encrypt',
+        'decrypt',
+      ])) as CryptoKey;
 
       await keyManager.setKey(mockKey, 5);
 
@@ -193,11 +189,10 @@ describe('Key Manager Module', () => {
       const handler = vi.fn();
       keyManager.on('key-set', handler);
 
-      const mockKey = await crypto.subtle.generateKey(
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-      ) as CryptoKey;
+      const mockKey = (await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+        'encrypt',
+        'decrypt',
+      ])) as CryptoKey;
 
       await keyManager.setKey(mockKey, 10);
 
@@ -312,9 +307,7 @@ describe('Key Manager Module', () => {
       // Wait for async rotation
       await vi.runAllTimersAsync();
 
-      expect(autoRotateManager.getState().currentGeneration).toBeGreaterThan(
-        initialGeneration
-      );
+      expect(autoRotateManager.getState().currentGeneration).toBeGreaterThan(initialGeneration);
 
       autoRotateManager.destroy();
       vi.useRealTimers();

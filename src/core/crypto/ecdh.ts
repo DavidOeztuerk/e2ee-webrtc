@@ -86,19 +86,11 @@ export async function deriveSharedSecret(
   publicKey: CryptoKey
 ): Promise<Uint8Array> {
   if (!privateKey) {
-    throw new E2EEError(
-      E2EEErrorCode.INVALID_KEY,
-      'Private key is null or undefined',
-      false
-    );
+    throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Private key is null or undefined', false);
   }
 
   if (!publicKey) {
-    throw new E2EEError(
-      E2EEErrorCode.INVALID_KEY,
-      'Public key is null or undefined',
-      false
-    );
+    throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Public key is null or undefined', false);
   }
 
   try {
@@ -187,12 +179,7 @@ export async function importPublicKey(keyData: Uint8Array): Promise<CryptoKey> {
       [] // Public keys don't have usages
     );
   } catch (error) {
-    throw new E2EEError(
-      E2EEErrorCode.INVALID_KEY,
-      'Failed to import public key',
-      false,
-      error
-    );
+    throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Failed to import public key', false, error);
   }
 }
 
@@ -260,13 +247,9 @@ export async function deriveEncryptionKey(
 ): Promise<CryptoKey> {
   try {
     // Import shared secret as HKDF key material
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw',
-      sharedSecret,
-      'HKDF',
-      false,
-      ['deriveKey']
-    );
+    const keyMaterial = await crypto.subtle.importKey('raw', sharedSecret, 'HKDF', false, [
+      'deriveKey',
+    ]);
 
     // Derive AES-GCM key using HKDF
     return await crypto.subtle.deriveKey(

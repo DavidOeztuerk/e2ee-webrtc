@@ -67,25 +67,16 @@ describe('ECDH Key Exchange Module', () => {
 
     it('should derive the same shared secret for both parties', async () => {
       // Alice derives secret using her private key and Bob's public key
-      const aliceSecret = await deriveSharedSecret(
-        aliceKeyPair.privateKey,
-        bobKeyPair.publicKey
-      );
+      const aliceSecret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
 
       // Bob derives secret using his private key and Alice's public key
-      const bobSecret = await deriveSharedSecret(
-        bobKeyPair.privateKey,
-        aliceKeyPair.publicKey
-      );
+      const bobSecret = await deriveSharedSecret(bobKeyPair.privateKey, aliceKeyPair.publicKey);
 
       expect(aliceSecret).toEqual(bobSecret);
     });
 
     it('should derive a 256-bit (32 byte) shared secret', async () => {
-      const secret = await deriveSharedSecret(
-        aliceKeyPair.privateKey,
-        bobKeyPair.publicKey
-      );
+      const secret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
 
       expect(secret).toBeInstanceOf(Uint8Array);
       expect(secret.length).toBe(32);
@@ -245,7 +236,7 @@ describe('ECDH Key Exchange Module', () => {
     });
 
     it('should format 8-byte fingerprint correctly (truncated)', async () => {
-      const fingerprint = new Uint8Array([0x12, 0xAB, 0xCD, 0xEF, 0x00, 0x11, 0x22, 0x33]);
+      const fingerprint = new Uint8Array([0x12, 0xab, 0xcd, 0xef, 0x00, 0x11, 0x22, 0x33]);
 
       const formatted = formatFingerprint(fingerprint, 8);
 

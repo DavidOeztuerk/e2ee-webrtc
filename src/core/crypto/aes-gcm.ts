@@ -97,11 +97,7 @@ export async function encryptFrame(
   generation: KeyGeneration
 ): Promise<EncryptedFrame> {
   if (!key) {
-    throw new E2EEError(
-      E2EEErrorCode.INVALID_KEY,
-      'Encryption key is null or undefined',
-      false
-    );
+    throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Encryption key is null or undefined', false);
   }
 
   try {
@@ -123,12 +119,7 @@ export async function encryptFrame(
       ciphertext: new Uint8Array(ciphertext),
     };
   } catch (error) {
-    throw new E2EEError(
-      E2EEErrorCode.ENCRYPTION_FAILED,
-      'Failed to encrypt frame',
-      true,
-      error
-    );
+    throw new E2EEError(E2EEErrorCode.ENCRYPTION_FAILED, 'Failed to encrypt frame', true, error);
   }
 }
 
@@ -146,16 +137,9 @@ export async function encryptFrame(
  * // decrypted contains original frame data
  * ```
  */
-export async function decryptFrame(
-  frame: EncryptedFrame,
-  key: CryptoKey
-): Promise<Uint8Array> {
+export async function decryptFrame(frame: EncryptedFrame, key: CryptoKey): Promise<Uint8Array> {
   if (!key) {
-    throw new E2EEError(
-      E2EEErrorCode.INVALID_KEY,
-      'Decryption key is null or undefined',
-      false
-    );
+    throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Decryption key is null or undefined', false);
   }
 
   try {
@@ -192,12 +176,7 @@ export async function exportKey(key: CryptoKey): Promise<Uint8Array> {
     const exported = await crypto.subtle.exportKey('raw', key);
     return new Uint8Array(exported);
   } catch (error) {
-    throw new E2EEError(
-      E2EEErrorCode.KEY_GENERATION_FAILED,
-      'Failed to export key',
-      false,
-      error
-    );
+    throw new E2EEError(E2EEErrorCode.KEY_GENERATION_FAILED, 'Failed to export key', false, error);
   }
 }
 
@@ -218,20 +197,12 @@ export async function importKey(keyData: Uint8Array): Promise<CryptoKey> {
   }
 
   try {
-    return await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'AES-GCM', length: 256 },
-      true,
-      ['encrypt', 'decrypt']
-    );
+    return await crypto.subtle.importKey('raw', keyData, { name: 'AES-GCM', length: 256 }, true, [
+      'encrypt',
+      'decrypt',
+    ]);
   } catch (error) {
-    throw new E2EEError(
-      E2EEErrorCode.INVALID_KEY,
-      'Failed to import key',
-      false,
-      error
-    );
+    throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Failed to import key', false, error);
   }
 }
 

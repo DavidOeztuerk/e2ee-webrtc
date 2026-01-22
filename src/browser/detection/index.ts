@@ -308,13 +308,14 @@ export function getE2EESupportDescription(): string {
   const { browser, version, e2eeMethod } = capabilities;
 
   if (e2eeMethod === 'none') {
-    return `E2EE is not supported on ${browser} ${version}. ` +
-      'Please use Chrome 86+, Edge 86+, or Safari 15.4+.';
+    return (
+      `E2EE is not supported on ${browser} ${version}. ` +
+      'Please use Chrome 86+, Edge 86+, or Safari 15.4+.'
+    );
   }
 
-  const methodName = e2eeMethod === 'insertable-streams'
-    ? 'Insertable Streams'
-    : 'Script Transform';
+  const methodName =
+    e2eeMethod === 'insertable-streams' ? 'Insertable Streams' : 'Script Transform';
 
   return `E2EE is supported using ${methodName} on ${browser} ${version}`;
 }

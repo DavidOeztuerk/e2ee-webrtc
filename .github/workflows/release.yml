@@ -36,6 +36,7 @@ jobs:
       - name: Build workers
         run: npm run build:workers
 
+      # Required: Configure NPM_TOKEN secret for npm publishing
       - name: Publish to npm
         run: npm publish --access public
         env:

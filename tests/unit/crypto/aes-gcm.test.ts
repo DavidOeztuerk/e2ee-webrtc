@@ -43,9 +43,7 @@ describe('AES-GCM Crypto Module', () => {
     });
 
     it('should throw on crypto API failure', async () => {
-      vi.spyOn(crypto.subtle, 'generateKey').mockRejectedValueOnce(
-        new Error('Crypto error')
-      );
+      vi.spyOn(crypto.subtle, 'generateKey').mockRejectedValueOnce(new Error('Crypto error'));
 
       await expect(generateEncryptionKey()).rejects.toThrow();
     });
@@ -67,8 +65,12 @@ describe('AES-GCM Crypto Module', () => {
       const iv2 = generateIV();
 
       // Convert to hex for comparison
-      const hex1 = Array.from(iv1).map(b => b.toString(16)).join('');
-      const hex2 = Array.from(iv2).map(b => b.toString(16)).join('');
+      const hex1 = Array.from(iv1)
+        .map((b) => b.toString(16))
+        .join('');
+      const hex2 = Array.from(iv2)
+        .map((b) => b.toString(16))
+        .join('');
 
       expect(hex1).not.toEqual(hex2);
     });
@@ -79,7 +81,9 @@ describe('AES-GCM Crypto Module', () => {
 
       for (let i = 0; i < iterations; i++) {
         const iv = generateIV();
-        const hex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+        const hex = Array.from(iv)
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
         ivSet.add(hex);
       }
 
@@ -139,8 +143,9 @@ describe('AES-GCM Crypto Module', () => {
     it('should throw on null key', async () => {
       const plaintext = new Uint8Array([1, 2, 3]);
 
-      await expect(encryptFrame(plaintext, null as unknown as CryptoKey, generation))
-        .rejects.toThrow();
+      await expect(
+        encryptFrame(plaintext, null as unknown as CryptoKey, generation)
+      ).rejects.toThrow();
     });
 
     it('should produce different ciphertext for same plaintext (due to random IV)', async () => {
@@ -231,8 +236,7 @@ describe('AES-GCM Crypto Module', () => {
         ciphertext: new Uint8Array(32),
       };
 
-      await expect(decryptFrame(encrypted, null as unknown as CryptoKey))
-        .rejects.toThrow();
+      await expect(decryptFrame(encrypted, null as unknown as CryptoKey)).rejects.toThrow();
     });
   });
 
@@ -347,9 +351,9 @@ describe('AES-GCM Crypto Module', () => {
         zeroizeKey(exported);
 
         // All bytes should be zero
-        expect(exported.every(b => b === 0)).toBe(true);
+        expect(exported.every((b) => b === 0)).toBe(true);
         // Should have been different before
-        expect(originalValues.some(b => b !== 0)).toBe(true);
+        expect(originalValues.some((b) => b !== 0)).toBe(true);
       });
 
       it('should handle empty arrays', () => {

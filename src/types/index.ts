@@ -75,7 +75,7 @@ export interface SignalingConfig {
  */
 export interface SfuConfig {
   /** SFU server URL or 'managed' for our cloud service */
-  url: string | 'managed';
+  url: string;
   /** Port range for media */
   portRange?: { min: number; max: number };
 }
@@ -85,7 +85,9 @@ export interface SfuConfig {
  */
 export interface TurnConfig {
   /** TURN server URLs or 'managed' for our cloud service */
-  urls: string[] | 'managed';
+  urls: string[];
+  /** Use managed TURN service */
+  managed?: boolean;
   /** TURN username */
   username?: string;
   /** TURN credential */

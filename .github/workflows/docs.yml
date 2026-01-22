@@ -53,6 +53,7 @@ jobs:
           path: '_site'
 
   deploy:
+    # Note: 'github-pages' environment is auto-created when Pages is enabled in repo settings
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

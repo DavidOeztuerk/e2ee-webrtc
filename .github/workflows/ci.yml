@@ -138,8 +138,9 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: true
 
+      # Optional: Configure SNYK_TOKEN secret to enable Snyk scanning
       - name: Run Snyk security scan
         uses: snyk/actions/node@master
-        continue-on-error: true
+        continue-on-error: true  # Fails gracefully if SNYK_TOKEN not configured
         env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN || '' }}
