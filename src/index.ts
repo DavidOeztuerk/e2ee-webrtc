@@ -133,8 +133,34 @@ export {
   getE2EESupportDescription,
 } from './browser';
 
-// Main client class (to be implemented)
-// export { E2EEClient } from './client';
+// Main client class
+export {
+  E2EEClient,
+  SignalingClient,
+  PeerManager,
+  type E2EEClientConfig,
+  type E2EEClientState,
+  type E2EEClientStats,
+  type E2EEClientEventType,
+  type E2EEClientEventMap,
+  type E2EEParticipant,
+  type SignalingClientConfig,
+  type SignalingConnectionState,
+  type SignalingEventType,
+  type SignalingEventMap,
+  type SignalingParticipant,
+  type JoinRoomOptions,
+  type JoinRoomResult,
+  type SDPDescription,
+  type ICECandidateInfo,
+  type KeyExchangePayload,
+  type PeerManagerConfig,
+  type PeerManagerEventType,
+  type PeerManagerEventMap,
+  type PeerInfo,
+  type IceServerConfig,
+  type EncryptionTransform,
+} from './client';
 
 // Version
 export const VERSION = '0.1.0';
