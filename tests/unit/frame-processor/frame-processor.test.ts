@@ -18,15 +18,28 @@ import type { KeyGeneration } from '../../../src/types';
 
 // Mock the crypto module
 vi.mock('../../../src/core/crypto/aes-gcm', () => ({
-  encryptFrame: vi.fn(async (plaintext: Uint8Array) => {
-    // Simulate encryption: add 16 bytes for auth tag
+  encryptFrame: vi.fn(async (plaintext: Uint8Array, _key: CryptoKey, generation: number) => {
+    // Simulate encryption: return EncryptedFrame object
+    const iv = new Uint8Array(IV_SIZE);
     const ciphertext = new Uint8Array(plaintext.length + AUTH_TAG_SIZE);
     ciphertext.set(plaintext);
-    return ciphertext;
+    return {
+      generation: generation & 0xff,
+      iv,
+      ciphertext,
+    };
   }),
-  decryptFrame: vi.fn(async (ciphertext: Uint8Array) => {
+  decryptFrame: vi.fn(async (frame: { ciphertext: Uint8Array }) => {
     // Simulate decryption: remove 16 bytes for auth tag
-    return new Uint8Array(ciphertext.slice(0, ciphertext.length - AUTH_TAG_SIZE));
+    return new Uint8Array(frame.ciphertext.slice(0, frame.ciphertext.length - AUTH_TAG_SIZE));
+  }),
+  serializeFrame: vi.fn((frame: { generation: number; iv: Uint8Array; ciphertext: Uint8Array }) => {
+    // Serialize frame: [generation][iv][ciphertext]
+    const result = new Uint8Array(1 + frame.iv.length + frame.ciphertext.length);
+    result[0] = frame.generation;
+    result.set(frame.iv, 1);
+    result.set(frame.ciphertext, 1 + frame.iv.length);
+    return result;
   }),
   generateIV: vi.fn(() => new Uint8Array(IV_SIZE)),
 }));
