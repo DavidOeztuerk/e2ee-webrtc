@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E2EE WebRTC - Live Demo</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #0f172a;
+      --bg-light: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+
+    .card {
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card h2 {
+      font-size: 18px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .status-item {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .status-item .label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .status-item .value {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .status-badge.success {
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--success);
+    }
+
+    .status-badge.warning {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+    }
+
+    .status-badge.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--error);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.1);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .fingerprint {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      word-break: break-all;
+      background: var(--bg);
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    .log {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+    }
+
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-entry .time {
+      color: var(--text-muted);
+      margin-right: 8px;
+    }
+
+    .log-entry.info { color: var(--text); }
+    .log-entry.success { color: var(--success); }
+    .log-entry.warning { color: var(--warning); }
+    .log-entry.error { color: var(--error); }
+
+    .encryption-demo {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .encryption-demo .arrow {
+      font-size: 24px;
+      color: var(--primary);
+    }
+
+    .data-box {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .data-box .label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .data-box .content {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      word-break: break-all;
+      min-height: 40px;
+    }
+
+    @media (max-width: 600px) {
+      .encryption-demo {
+        grid-template-columns: 1fr;
+      }
+
+      .encryption-demo .arrow {
+        transform: rotate(90deg);
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 E2EE WebRTC Demo</h1>
+    <p class="subtitle">Test end-to-end encryption in your browser</p>
+
+    <!-- Browser Status -->
+    <div class="card">
+      <h2>📊 Browser Capabilities</h2>
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="label">Browser</div>
+          <div class="value" id="browser-name">Detecting...</div>
+        </div>
+        <div class="status-item">
+          <div class="label">E2EE Support</div>
+          <div class="value" id="e2ee-support">
+            <span class="status-badge">Checking...</span>
+          </div>
+        </div>
+        <div class="status-item">
+          <div class="label">E2EE Method</div>
+          <div class="value" id="e2ee-method">-</div>
+        </div>
+        <div class="status-item">
+          <div class="label">Workers</div>
+          <div class="value" id="workers-support">
+            <span class="status-badge">Checking...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Key Management -->
+    <div class="card">
+      <h2>🔑 Key Management</h2>
+      <div class="btn-group" style="margin-bottom: 16px;">
+        <button class="btn btn-primary" id="btn-generate-key">
+          Generate Key
+        </button>
+        <button class="btn btn-primary" id="btn-rotate-key" disabled>
+          Rotate Key
+        </button>
+      </div>
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="label">Key Generation</div>
+          <div class="value" id="key-generation">-</div>
+        </div>
+        <div class="status-item">
+          <div class="label">Key Status</div>
+          <div class="value" id="key-status">
+            <span class="status-badge warning">No Key</span>
+          </div>
+        </div>
+      </div>
+      <div class="fingerprint" id="key-fingerprint">
+        Key fingerprint will appear here after generation
+      </div>
+    </div>
+
+    <!-- Encryption Demo -->
+    <div class="card">
+      <h2>🔒 Encryption Demo</h2>
+      <div class="btn-group" style="margin-bottom: 16px;">
+        <button class="btn btn-primary" id="btn-encrypt" disabled>
+          Encrypt Test Data
+        </button>
+        <button class="btn btn-primary" id="btn-decrypt" disabled>
+          Decrypt
+        </button>
+      </div>
+      <div class="encryption-demo">
+        <div class="data-box">
+          <div class="label">Plaintext</div>
+          <div class="content" id="plaintext-data">Hello, E2EE WebRTC! 🔐</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="data-box">
+          <div class="label">Encrypted</div>
+          <div class="content" id="encrypted-data">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="card">
+      <h2>📝 Event Log</h2>
+      <div class="log" id="event-log">
+        <div class="log-entry info">
+          <span class="time">--:--:--</span>
+          Waiting for initialization...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import from the built library (will be bundled)
+    // For demo, we'll use inline implementations
+
+    const log = (message, type = 'info') => {
+      const logEl = document.getElementById('event-log');
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.innerHTML = `<span class="time">${time}</span>${message}`;
+      logEl.insertBefore(entry, logEl.firstChild);
+    };
+
+    const updateBadge = (elementId, text, type) => {
+      const el = document.getElementById(elementId);
+      el.innerHTML = `<span class="status-badge ${type}">${text}</span>`;
+    };
+
+    // Detect browser capabilities
+    const detectBrowser = () => {
+      const ua = navigator.userAgent;
+      let browser = 'Unknown';
+      let version = '';
+
+      if (ua.includes('Edg/')) {
+        browser = 'Edge';
+        version = ua.match(/Edg\/(\d+)/)?.[1] || '';
+      } else if (ua.includes('Chrome/')) {
+        browser = 'Chrome';
+        version = ua.match(/Chrome\/(\d+)/)?.[1] || '';
+      } else if (ua.includes('Safari/') && !ua.includes('Chrome')) {
+        browser = 'Safari';
+        version = ua.match(/Version\/(\d+)/)?.[1] || '';
+      } else if (ua.includes('Firefox/')) {
+        browser = 'Firefox';
+        version = ua.match(/Firefox\/(\d+)/)?.[1] || '';
+      }
+
+      return { browser, version };
+    };
+
+    const supportsInsertableStreams = () => {
+      return typeof RTCRtpSender !== 'undefined' &&
+             'createEncodedStreams' in RTCRtpSender.prototype;
+    };
+
+    const supportsScriptTransform = () => {
+      return typeof RTCRtpScriptTransform !== 'undefined';
+    };
+
+    // Initialize
+    const init = async () => {
+      log('Initializing demo...', 'info');
+
+      // Browser detection
+      const { browser, version } = detectBrowser();
+      document.getElementById('browser-name').textContent = `${browser} ${version}`;
+      log(`Detected browser: ${browser} ${version}`, 'info');
+
+      // E2EE support
+      const hasInsertable = supportsInsertableStreams();
+      const hasScriptTransform = supportsScriptTransform();
+      const hasWorkers = typeof Worker !== 'undefined';
+
+      const isSupported = hasWorkers && (hasInsertable || hasScriptTransform);
+
+      if (isSupported) {
+        updateBadge('e2ee-support', '✓ Supported', 'success');
+        log('E2EE is supported in this browser', 'success');
+      } else {
+        updateBadge('e2ee-support', '✗ Not Supported', 'error');
+        log('E2EE is NOT supported in this browser', 'error');
+      }
+
+      // E2EE Method
+      let method = 'None';
+      if (hasInsertable) {
+        method = 'Insertable Streams';
+      } else if (hasScriptTransform) {
+        method = 'Script Transform';
+      }
+      document.getElementById('e2ee-method').textContent = method;
+
+      // Workers support
+      if (hasWorkers) {
+        updateBadge('workers-support', '✓ Available', 'success');
+      } else {
+        updateBadge('workers-support', '✗ Not Available', 'error');
+      }
+    };
+
+    // Key management state
+    let currentKey = null;
+    let keyGeneration = 0;
+
+    // Generate encryption key
+    const generateKey = async () => {
+      log('Generating encryption key...', 'info');
+
+      try {
+        currentKey = await crypto.subtle.generateKey(
+          { name: 'AES-GCM', length: 256 },
+          true,
+          ['encrypt', 'decrypt']
+        );
+        keyGeneration++;
+
+        document.getElementById('key-generation').textContent = keyGeneration;
+        updateBadge('key-status', '✓ Active', 'success');
+
+        // Compute fingerprint
+        const exported = await crypto.subtle.exportKey('raw', currentKey);
+        const hash = await crypto.subtle.digest('SHA-256', exported);
+        const fingerprint = Array.from(new Uint8Array(hash))
+          .map(b => b.toString(16).toUpperCase().padStart(2, '0'))
+          .join(':');
+
+        document.getElementById('key-fingerprint').textContent = fingerprint;
+
+        log(`Key generated (generation ${keyGeneration})`, 'success');
+
+        // Enable buttons
+        document.getElementById('btn-rotate-key').disabled = false;
+        document.getElementById('btn-encrypt').disabled = false;
+      } catch (err) {
+        log(`Key generation failed: ${err.message}`, 'error');
+      }
+    };
+
+    // Rotate key
+    const rotateKey = async () => {
+      log('Rotating key...', 'info');
+      await generateKey();
+      log('Key rotated successfully', 'success');
+    };
+
+    // Encrypt demo
+    let encryptedData = null;
+
+    const encryptDemo = async () => {
+      if (!currentKey) return;
+
+      const plaintext = document.getElementById('plaintext-data').textContent;
+      const encoder = new TextEncoder();
+      const data = encoder.encode(plaintext);
+
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+
+      try {
+        const ciphertext = await crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv, tagLength: 128 },
+          currentKey,
+          data
+        );
+
+        // Format: [generation][iv][ciphertext]
+        encryptedData = {
+          generation: keyGeneration,
+          iv,
+          ciphertext: new Uint8Array(ciphertext)
+        };
+
+        // Display as hex
+        const combined = new Uint8Array(1 + iv.length + ciphertext.byteLength);
+        combined[0] = keyGeneration;
+        combined.set(iv, 1);
+        combined.set(new Uint8Array(ciphertext), 1 + iv.length);
+
+        const hex = Array.from(combined.slice(0, 50))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join(' ') + '...';
+
+        document.getElementById('encrypted-data').textContent = hex;
+        document.getElementById('btn-decrypt').disabled = false;
+
+        log(`Encrypted ${data.length} bytes → ${combined.length} bytes`, 'success');
+      } catch (err) {
+        log(`Encryption failed: ${err.message}`, 'error');
+      }
+    };
+
+    const decryptDemo = async () => {
+      if (!currentKey || !encryptedData) return;
+
+      try {
+        const decrypted = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: encryptedData.iv, tagLength: 128 },
+          currentKey,
+          encryptedData.ciphertext
+        );
+
+        const decoder = new TextDecoder();
+        const plaintext = decoder.decode(decrypted);
+
+        document.getElementById('encrypted-data').textContent = `Decrypted: "${plaintext}"`;
+        log(`Decryption successful: "${plaintext}"`, 'success');
+      } catch (err) {
+        log(`Decryption failed: ${err.message}`, 'error');
+      }
+    };
+
+    // Event listeners
+    document.getElementById('btn-generate-key').addEventListener('click', generateKey);
+    document.getElementById('btn-rotate-key').addEventListener('click', rotateKey);
+    document.getElementById('btn-encrypt').addEventListener('click', encryptDemo);
+    document.getElementById('btn-decrypt').addEventListener('click', decryptDemo);
+
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>

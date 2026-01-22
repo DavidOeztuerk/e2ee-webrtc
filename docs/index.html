@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E2EE WebRTC - Documentation</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg: #0f172a;
+      --bg-light: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-icon {
+      font-size: 28px;
+    }
+
+    nav {
+      display: flex;
+      gap: 24px;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    nav a:hover {
+      color: var(--text);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 80px 0;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 48px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, var(--primary), #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 20px;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 32px;
+    }
+
+    .badge-row {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+    }
+
+    .badge.success {
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .cta-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-secondary {
+      background: var(--bg-light);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--primary);
+    }
+
+    /* Features */
+    .features {
+      padding: 80px 0;
+      background: var(--bg-light);
+    }
+
+    .features h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 48px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .feature-card .icon {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+
+    .feature-card h3 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+    }
+
+    /* Code Example */
+    .code-section {
+      padding: 80px 0;
+    }
+
+    .code-section h2 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 48px;
+    }
+
+    pre {
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      overflow-x: auto;
+      font-family: 'Fira Code', 'Monaco', monospace;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    code {
+      color: #e2e8f0;
+    }
+
+    .keyword { color: #c792ea; }
+    .string { color: #c3e88d; }
+    .function { color: #82aaff; }
+    .comment { color: #546e7a; }
+    .const { color: #f78c6c; }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 {
+        font-size: 32px;
+      }
+
+      .hero p {
+        font-size: 16px;
+      }
+
+      nav {
+        display: none;
+      }
+
+      .cta-buttons {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo">
+        <span class="logo-icon">🔐</span>
+        <span>E2EE WebRTC</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="./api/">API Docs</a>
+        <a href="./demo/">Live Demo</a>
+        <a href="https://github.com/DavidOeztuerk/e2ee-webrtc">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <h1>End-to-End Encrypted WebRTC</h1>
+        <p>
+          Framework-agnostic E2EE library with Post-Quantum support,
+          Multi-Party SFU, and Digital Sovereignty. Works with any JavaScript framework.
+        </p>
+        <div class="badge-row">
+          <span class="badge success">✓ Chrome Supported</span>
+          <span class="badge success">✓ Safari Supported</span>
+          <span class="badge">TypeScript</span>
+          <span class="badge">MIT License</span>
+        </div>
+        <div class="cta-buttons">
+          <a href="#quick-start" class="btn btn-primary">
+            Get Started
+          </a>
+          <a href="./demo/" class="btn btn-secondary">
+            Try Live Demo
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="container">
+        <h2>Features</h2>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="icon">🔐</div>
+            <h3>True E2E Encryption</h3>
+            <p>AES-GCM-256 encryption with unique IVs per frame. Your data never leaves unencrypted.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">🌐</div>
+            <h3>Cross-Browser</h3>
+            <p>Chrome (Insertable Streams) + Safari (Script Transform). Unified API for all browsers.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">🚀</div>
+            <h3>Framework Agnostic</h3>
+            <p>Works with React, Vue, Angular, Svelte, or vanilla JavaScript. No dependencies.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">🏠</div>
+            <h3>Digital Sovereignty</h3>
+            <p>Self-host on your infrastructure. Full control over your data and compliance.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">🔄</div>
+            <h3>Key Rotation</h3>
+            <p>Automatic key rotation with configurable intervals. Perfect forward secrecy.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">👥</div>
+            <h3>Multi-Party</h3>
+            <p>SFU-ready with Sender Keys encryption. Scale to large video conferences.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="code-section" id="quick-start">
+      <div class="container">
+        <h2>Quick Start</h2>
+        <pre><code><span class="comment">// Install</span>
+npm install @aspect/e2ee-webrtc
+
+<span class="comment">// Use</span>
+<span class="keyword">import</span> { isE2EESupported, KeyManager } <span class="keyword">from</span> <span class="string">'@aspect/e2ee-webrtc'</span>;
+
+<span class="comment">// Check support</span>
+<span class="keyword">if</span> (!<span class="function">isE2EESupported</span>()) {
+  console.<span class="function">warn</span>(<span class="string">'E2EE not supported'</span>);
+}
+
+<span class="comment">// Create key manager</span>
+<span class="keyword">const</span> keyManager = <span class="keyword">new</span> <span class="function">KeyManager</span>({
+  keyHistorySize: <span class="const">5</span>,
+  autoRotate: <span class="const">true</span>,
+  rotationIntervalMs: <span class="const">30000</span>,
+});
+
+<span class="comment">// Generate encryption key</span>
+<span class="keyword">await</span> keyManager.<span class="function">generateKey</span>();
+
+<span class="comment">// Listen for events</span>
+keyManager.<span class="function">on</span>(<span class="string">'key-rotated'</span>, (data) => {
+  console.<span class="function">log</span>(<span class="string">`Key rotated to generation ${data.generation}`</span>);
+});</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>
+        Made with ❤️ by <a href="https://github.com/DavidOeztuerk">David Öztuerk</a>
+        · <a href="https://github.com/DavidOeztuerk/e2ee-webrtc">GitHub</a>
+        · MIT License
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

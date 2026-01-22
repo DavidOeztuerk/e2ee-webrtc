@@ -1,0 +1,115 @@
+{
+  "name": "@aspect/e2ee-webrtc",
+  "version": "0.1.0",
+  "description": "Framework-agnostic End-to-End Encrypted WebRTC library with Post-Quantum support, Multi-Party SFU, and Digital Sovereignty",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/esm/core/index.js",
+      "require": "./dist/cjs/core/index.js",
+      "types": "./dist/types/core/index.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/esm/browser/index.js",
+      "require": "./dist/cjs/browser/index.js",
+      "types": "./dist/types/browser/index.d.ts"
+    },
+    "./sfu": {
+      "import": "./dist/esm/sfu/index.js",
+      "require": "./dist/cjs/sfu/index.js",
+      "types": "./dist/types/sfu/index.d.ts"
+    },
+    "./workers/*": {
+      "import": "./dist/esm/workers/*.js",
+      "require": "./dist/cjs/workers/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "server",
+    "deploy",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs && npm run build:types",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:types": "tsc -p tsconfig.types.json",
+    "build:workers": "esbuild src/workers/*.ts --bundle --format=esm --outdir=dist/workers",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "lint": "eslint src tests --ext .ts",
+    "lint:fix": "eslint src tests --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "docs": "typedoc --out docs/api src/index.ts",
+    "docs:serve": "npx serve docs",
+    "demo:dev": "vite demo",
+    "demo:build": "vite build demo",
+    "prepublishOnly": "npm run build && npm run test",
+    "release": "semantic-release"
+  },
+  "keywords": [
+    "webrtc",
+    "e2ee",
+    "end-to-end-encryption",
+    "encryption",
+    "video-call",
+    "insertable-streams",
+    "script-transform",
+    "post-quantum",
+    "kyber",
+    "sfu",
+    "mediasoup",
+    "framework-agnostic",
+    "self-hosted",
+    "digital-sovereignty"
+  ],
+  "author": "David Öztuerk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DavidOeztuerk/e2ee-webrtc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DavidOeztuerk/e2ee-webrtc/issues"
+  },
+  "homepage": "https://davidoeztuerk.github.io/e2ee-webrtc",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "esbuild": "^0.19.8",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "prettier": "^3.1.0",
+    "semantic-release": "^22.0.8",
+    "typedoc": "^0.25.4",
+    "typescript": "^5.3.2",
+    "vite": "^5.0.4",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  }
+}
