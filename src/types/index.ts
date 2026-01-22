@@ -263,7 +263,7 @@ export interface Participant {
 /**
  * Session topology
  */
-export type SessionTopology = 'p2p' | 'mesh' | 'sfu';
+export type SessionTopology = 'p2p' | 'mesh' | 'sfu' | 'star';
 
 /**
  * Session information
