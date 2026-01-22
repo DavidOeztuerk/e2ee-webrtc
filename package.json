@@ -8,24 +8,24 @@
   "types": "dist/types/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js",
-      "types": "./dist/types/index.d.ts"
+      "require": "./dist/cjs/index.js"
     },
     "./core": {
+      "types": "./dist/types/core/index.d.ts",
       "import": "./dist/esm/core/index.js",
-      "require": "./dist/cjs/core/index.js",
-      "types": "./dist/types/core/index.d.ts"
+      "require": "./dist/cjs/core/index.js"
     },
     "./browser": {
+      "types": "./dist/types/browser/index.d.ts",
       "import": "./dist/esm/browser/index.js",
-      "require": "./dist/cjs/browser/index.js",
-      "types": "./dist/types/browser/index.d.ts"
+      "require": "./dist/cjs/browser/index.js"
     },
     "./sfu": {
+      "types": "./dist/types/sfu/index.d.ts",
       "import": "./dist/esm/sfu/index.js",
-      "require": "./dist/cjs/sfu/index.js",
-      "types": "./dist/types/sfu/index.d.ts"
+      "require": "./dist/cjs/sfu/index.js"
     },
     "./workers/*": {
       "import": "./dist/workers/*.js",

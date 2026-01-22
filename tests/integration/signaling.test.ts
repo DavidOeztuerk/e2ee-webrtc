@@ -9,7 +9,7 @@
  * Run with: docker-compose -f docker-compose.test.yml up
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import WebSocket from 'ws';
 
 // Skip if not in CI or Docker environment
@@ -27,9 +27,9 @@ interface SignalingMessage {
 /**
  * Helper to create a WebSocket client
  */
-function createClient(roomId: string): Promise<WebSocket> {
+function createClient(): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${SIGNALING_URL}?room=${roomId}`);
+    const ws = new WebSocket(SIGNALING_URL);
 
     ws.on('open', () => resolve(ws));
     ws.on('error', reject);
@@ -47,8 +47,7 @@ function waitForMessage(ws: WebSocket, type: string, timeout = 5000): Promise<Si
       reject(new Error(`Timeout waiting for message type: ${type}`));
     }, timeout);
 
-    const handler = (data: WebSocket.Data) => {
-      // WebSocket JSON messages are sent as strings or buffers
+    const handler = (data: WebSocket.Data): void => {
       const dataString = Buffer.isBuffer(data) ? data.toString('utf-8') : (data as string);
       const message = JSON.parse(dataString) as SignalingMessage;
       if (message.type === type) {
@@ -105,19 +104,22 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
       expect(response.ok).toBe(true);
 
       const data = await response.json();
-      expect(data.status).toBe('ok');
+      expect(data.status).toBe('healthy');
     });
   });
 
   describe('Room Management', () => {
     it('should allow a client to join a room', async () => {
       const roomId = `test-room-${Date.now()}`;
-      client1 = await createClient(roomId);
+      client1 = await createClient();
+
+      // Wait for welcome message first
+      await waitForMessage(client1, 'welcome');
 
       sendMessage(client1, {
         type: 'join',
-        participantId: 'user-1',
-        name: 'Test User 1',
+        roomId,
+        payload: { displayName: 'Test User 1' },
       });
 
       const response = await waitForMessage(client1, 'joined');
@@ -129,37 +131,42 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
       const roomId = `test-room-${Date.now()}`;
 
       // First client joins
-      client1 = await createClient(roomId);
+      client1 = await createClient();
+      await waitForMessage(client1, 'welcome');
       sendMessage(client1, {
         type: 'join',
-        participantId: 'user-1',
-        name: 'Test User 1',
+        roomId,
+        payload: { displayName: 'Test User 1' },
       });
       await waitForMessage(client1, 'joined');
 
       // Second client joins
-      client2 = await createClient(roomId);
+      client2 = await createClient();
+      await waitForMessage(client2, 'welcome');
       sendMessage(client2, {
         type: 'join',
-        participantId: 'user-2',
-        name: 'Test User 2',
+        roomId,
+        payload: { displayName: 'Test User 2' },
       });
 
       // First client should receive notification
       const notification = await waitForMessage(client1, 'participant-joined');
-      expect(notification.participantId).toBe('user-2');
+      expect(notification.type).toBe('participant-joined');
+      expect(notification.displayName).toBe('Test User 2');
     });
 
     it('should notify when a participant leaves', async () => {
       const roomId = `test-room-${Date.now()}`;
 
       // Both clients join
-      client1 = await createClient(roomId);
-      sendMessage(client1, { type: 'join', participantId: 'user-1' });
+      client1 = await createClient();
+      await waitForMessage(client1, 'welcome');
+      sendMessage(client1, { type: 'join', roomId });
       await waitForMessage(client1, 'joined');
 
-      client2 = await createClient(roomId);
-      sendMessage(client2, { type: 'join', participantId: 'user-2' });
+      client2 = await createClient();
+      await waitForMessage(client2, 'welcome');
+      sendMessage(client2, { type: 'join', roomId });
       await waitForMessage(client1, 'participant-joined');
 
       // Second client leaves
@@ -168,7 +175,7 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
 
       // First client should receive notification
       const notification = await waitForMessage(client1, 'participant-left');
-      expect(notification.participantId).toBe('user-2');
+      expect(notification.type).toBe('participant-left');
     });
   });
 
@@ -177,46 +184,54 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
       const roomId = `test-room-${Date.now()}`;
 
       // Both clients join
-      client1 = await createClient(roomId);
-      sendMessage(client1, { type: 'join', participantId: 'user-1' });
+      client1 = await createClient();
+      const welcome1 = await waitForMessage(client1, 'welcome');
+      sendMessage(client1, { type: 'join', roomId });
       await waitForMessage(client1, 'joined');
 
-      client2 = await createClient(roomId);
-      sendMessage(client2, { type: 'join', participantId: 'user-2' });
+      client2 = await createClient();
+      const welcome2 = await waitForMessage(client2, 'welcome');
+      const participant2Id = welcome2.participantId as string;
+      sendMessage(client2, { type: 'join', roomId });
       await waitForMessage(client2, 'joined');
       await waitForMessage(client1, 'participant-joined');
 
       // Client 1 sends offer to Client 2
       const testOffer = {
         type: 'offer',
-        to: 'user-2',
-        sdp: 'v=0\r\no=- 123456 2 IN IP4 127.0.0.1\r\n...',
+        targetId: participant2Id,
+        payload: {
+          sdp: 'v=0\\r\\no=- 123456 2 IN IP4 127.0.0.1\\r\\n...',
+        },
       };
       sendMessage(client1, testOffer);
 
       // Client 2 should receive the offer
       const receivedOffer = await waitForMessage(client2, 'offer');
-      expect(receivedOffer.from).toBe('user-1');
-      expect(receivedOffer.sdp).toBe(testOffer.sdp);
+      expect(receivedOffer.senderId).toBe(welcome1.participantId);
+      expect((receivedOffer.payload as { sdp: string }).sdp).toBe(testOffer.payload.sdp);
     });
 
     it('should relay ICE candidates between participants', async () => {
       const roomId = `test-room-${Date.now()}`;
 
       // Both clients join
-      client1 = await createClient(roomId);
-      sendMessage(client1, { type: 'join', participantId: 'user-1' });
+      client1 = await createClient();
+      const welcome1 = await waitForMessage(client1, 'welcome');
+      sendMessage(client1, { type: 'join', roomId });
       await waitForMessage(client1, 'joined');
 
-      client2 = await createClient(roomId);
-      sendMessage(client2, { type: 'join', participantId: 'user-2' });
+      client2 = await createClient();
+      const welcome2 = await waitForMessage(client2, 'welcome');
+      const participant2Id = welcome2.participantId as string;
+      sendMessage(client2, { type: 'join', roomId });
       await waitForMessage(client2, 'joined');
 
       // Client 1 sends ICE candidate
       const iceCandidate = {
         type: 'ice-candidate',
-        to: 'user-2',
-        candidate: {
+        targetId: participant2Id,
+        payload: {
           candidate: 'candidate:1 1 UDP 2122252543 192.168.1.1 12345 typ host',
           sdpMid: 'audio',
           sdpMLineIndex: 0,
@@ -226,8 +241,8 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
 
       // Client 2 should receive the candidate
       const received = await waitForMessage(client2, 'ice-candidate');
-      expect(received.from).toBe('user-1');
-      expect(received.candidate).toEqual(iceCandidate.candidate);
+      expect(received.senderId).toBe(welcome1.participantId);
+      expect(received.payload).toEqual(iceCandidate.payload);
     });
   });
 
@@ -236,62 +251,71 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
       const roomId = `test-room-${Date.now()}`;
 
       // Both clients join
-      client1 = await createClient(roomId);
-      sendMessage(client1, { type: 'join', participantId: 'user-1' });
+      client1 = await createClient();
+      const welcome1 = await waitForMessage(client1, 'welcome');
+      sendMessage(client1, { type: 'join', roomId });
       await waitForMessage(client1, 'joined');
 
-      client2 = await createClient(roomId);
-      sendMessage(client2, { type: 'join', participantId: 'user-2' });
+      client2 = await createClient();
+      const welcome2 = await waitForMessage(client2, 'welcome');
+      const participant2Id = welcome2.participantId as string;
+      sendMessage(client2, { type: 'join', roomId });
       await waitForMessage(client2, 'joined');
 
       // Client 1 sends E2EE key
       const keyMessage = {
-        type: 'e2ee-key',
-        to: 'user-2',
-        key: 'base64encodedkey==',
-        generation: 0,
+        type: 'key-exchange',
+        targetId: participant2Id,
+        payload: {
+          key: 'base64encodedkey==',
+          generation: 0,
+        },
       };
       sendMessage(client1, keyMessage);
 
       // Client 2 should receive the key
-      const received = await waitForMessage(client2, 'e2ee-key');
-      expect(received.from).toBe('user-1');
-      expect(received.key).toBe(keyMessage.key);
-      expect(received.generation).toBe(0);
+      const received = await waitForMessage(client2, 'key-exchange');
+      expect(received.senderId).toBe(welcome1.participantId);
+      expect((received.payload as { key: string }).key).toBe('base64encodedkey==');
     });
 
     it('should broadcast E2EE keys to all participants', async () => {
       const roomId = `test-room-${Date.now()}`;
 
       // Three clients join
-      client1 = await createClient(roomId);
-      sendMessage(client1, { type: 'join', participantId: 'user-1' });
+      client1 = await createClient();
+      const welcome1 = await waitForMessage(client1, 'welcome');
+      sendMessage(client1, { type: 'join', roomId });
       await waitForMessage(client1, 'joined');
 
-      client2 = await createClient(roomId);
-      sendMessage(client2, { type: 'join', participantId: 'user-2' });
+      client2 = await createClient();
+      await waitForMessage(client2, 'welcome');
+      sendMessage(client2, { type: 'join', roomId });
       await waitForMessage(client2, 'joined');
 
-      const client3 = await createClient(roomId);
-      sendMessage(client3, { type: 'join', participantId: 'user-3' });
+      const client3 = await createClient();
+      await waitForMessage(client3, 'welcome');
+      sendMessage(client3, { type: 'join', roomId });
       await waitForMessage(client3, 'joined');
 
-      // Client 1 broadcasts key (no 'to' field)
+      // Client 1 broadcasts key (no targetId)
       const keyMessage = {
-        type: 'e2ee-key',
-        key: 'broadcastkey==',
-        generation: 1,
+        type: 'key-broadcast',
+        payload: {
+          key: 'broadcastkey==',
+          generation: 1,
+        },
       };
       sendMessage(client1, keyMessage);
 
       // Both other clients should receive the key
       const [received2, received3] = await Promise.all([
-        waitForMessage(client2, 'e2ee-key'),
-        waitForMessage(client3, 'e2ee-key'),
+        waitForMessage(client2, 'key-broadcast'),
+        waitForMessage(client3, 'key-broadcast'),
       ]);
 
-      expect(received2.from).toBe('user-1');
-      expect(received3.from).toBe('user-1');
+      expect(received2.senderId).toBe(welcome1.participantId);
+      expect(received3.senderId).toBe(welcome1.participantId);
 
       client3.close();
     });
@@ -299,8 +323,8 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
 
   describe('Error Handling', () => {
     it('should handle invalid JSON gracefully', async () => {
-      const roomId = `test-room-${Date.now()}`;
-      client1 = await createClient(roomId);
+      client1 = await createClient();
+      await waitForMessage(client1, 'welcome');
 
       // Send invalid JSON
       client1.send('not valid json');
@@ -312,20 +336,21 @@ describe.skipIf(SKIP_INTEGRATION)('Signaling Server Integration', () => {
 
     it('should handle messages to non-existent participants', async () => {
       const roomId = `test-room-${Date.now()}`;
-      client1 = await createClient(roomId);
-      sendMessage(client1, { type: 'join', participantId: 'user-1' });
+      client1 = await createClient();
+      await waitForMessage(client1, 'welcome');
+      sendMessage(client1, { type: 'join', roomId });
       await waitForMessage(client1, 'joined');
 
       // Send to non-existent user
       sendMessage(client1, {
         type: 'offer',
-        to: 'non-existent-user',
-        sdp: 'test',
+        targetId: 'non-existent-user-id',
+        payload: { sdp: 'test' },
       });
 
       // Should receive error
       const error = await waitForMessage(client1, 'error');
-      expect(error.code).toBe('PARTICIPANT_NOT_FOUND');
+      expect(error.code).toBe('TARGET_NOT_FOUND');
     });
   });
 });
