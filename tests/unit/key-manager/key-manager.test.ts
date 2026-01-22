@@ -301,8 +301,16 @@ describe('Key Manager Module', () => {
       await autoRotateManager.generateKey();
       const initialGeneration = autoRotateManager.getState().currentGeneration;
 
-      // Fast-forward time by exactly 1100ms (avoid infinite loop from runAllTimersAsync)
+      // Create promise that resolves when key-rotated event fires
+      const rotationPromise = new Promise<void>((resolve) => {
+        autoRotateManager.once('key-rotated', () => resolve());
+      });
+
+      // Fast-forward time to trigger rotation
       await vi.advanceTimersByTimeAsync(1100);
+
+      // Wait for async rotation to complete
+      await rotationPromise;
 
       expect(autoRotateManager.getState().currentGeneration).toBeGreaterThan(initialGeneration);
 
