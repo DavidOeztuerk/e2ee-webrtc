@@ -10,6 +10,9 @@ import {
   getBestE2EEMethod,
   isE2EESupported,
   getWorkerUrl,
+  parseVersion,
+  meetsMinimumVersion,
+  getE2EESupportDescription,
 } from '@browser/detection';
 import type { BrowserCapabilities, BrowserType, E2EEMethod } from '@/types';
 
@@ -432,6 +435,31 @@ describe('Browser Detection Module', () => {
       expect(() => detectCapabilities()).not.toThrow();
     });
 
+    it('should handle undefined navigator', () => {
+      vi.stubGlobal('navigator', undefined);
+
+      const result = detectBrowser();
+
+      expect(result.browser).toBe('unknown');
+      expect(result.version).toBe('');
+    });
+
+    it('should handle undefined RTCRtpSender', () => {
+      vi.stubGlobal('RTCRtpSender', undefined);
+
+      const capabilities = detectCapabilities();
+
+      expect(capabilities.supportsInsertableStreams).toBe(false);
+    });
+
+    it('should handle undefined SharedArrayBuffer', () => {
+      vi.stubGlobal('SharedArrayBuffer', undefined);
+
+      const capabilities = detectCapabilities();
+
+      expect(capabilities.supportsSharedArrayBuffer).toBe(false);
+    });
+
     it('should detect Brave as Chrome-based', () => {
       mockUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -452,6 +480,134 @@ describe('Browser Detection Module', () => {
 
       // Opera uses Chromium, should be treated as Chrome for E2EE purposes
       expect(['chrome', 'edge']).toContain(result.browser);
+    });
+
+    it('should use script-transform when only that is available', () => {
+      mockUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15'
+      );
+
+      // Only Script Transform available, no Insertable Streams
+      vi.stubGlobal('RTCRtpSender', class {});
+      vi.stubGlobal('RTCRtpScriptTransform', class {});
+      vi.stubGlobal('Worker', class {});
+
+      const capabilities = detectCapabilities();
+
+      expect(capabilities.e2eeMethod).toBe('script-transform');
+    });
+  });
+
+  // =========================================================================
+  // parseVersion Tests
+  // =========================================================================
+  describe('parseVersion', () => {
+    it('should parse major version from full version string', () => {
+      expect(parseVersion('120.0.0.0')).toBe(120);
+    });
+
+    it('should parse simple version', () => {
+      expect(parseVersion('17.2')).toBe(17);
+    });
+
+    it('should return NaN for empty string', () => {
+      expect(parseVersion('')).toBeNaN();
+    });
+
+    it('should handle non-numeric versions', () => {
+      expect(parseVersion('abc')).toBeNaN();
+    });
+  });
+
+  // =========================================================================
+  // meetsMinimumVersion Tests
+  // =========================================================================
+  describe('meetsMinimumVersion', () => {
+    it('should return true for Chrome >= 86', () => {
+      expect(meetsMinimumVersion('chrome', '120.0.0.0')).toBe(true);
+      expect(meetsMinimumVersion('chrome', '86.0.0.0')).toBe(true);
+    });
+
+    it('should return false for Chrome < 86', () => {
+      expect(meetsMinimumVersion('chrome', '85.0.0.0')).toBe(false);
+    });
+
+    it('should return true for Edge >= 86', () => {
+      expect(meetsMinimumVersion('edge', '120.0.0.0')).toBe(true);
+    });
+
+    it('should return false for Edge < 86', () => {
+      expect(meetsMinimumVersion('edge', '85.0.0.0')).toBe(false);
+    });
+
+    it('should return true for Safari >= 15.4', () => {
+      expect(meetsMinimumVersion('safari', '17.2')).toBe(true);
+      expect(meetsMinimumVersion('safari', '16.0')).toBe(true);
+    });
+
+    it('should return false for Safari < 15.4', () => {
+      expect(meetsMinimumVersion('safari', '14.0')).toBe(false);
+    });
+
+    it('should return false for Firefox (unsupported)', () => {
+      expect(meetsMinimumVersion('firefox', '121.0')).toBe(false);
+    });
+
+    it('should return false for unknown browsers', () => {
+      expect(meetsMinimumVersion('unknown', '100.0')).toBe(false);
+    });
+  });
+
+  // =========================================================================
+  // getE2EESupportDescription Tests
+  // =========================================================================
+  describe('getE2EESupportDescription', () => {
+    it('should return description for supported browser with Insertable Streams', () => {
+      mockUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      );
+
+      function MockRTCRtpSender() {}
+      MockRTCRtpSender.prototype.createEncodedStreams = () => ({});
+      vi.stubGlobal('RTCRtpSender', MockRTCRtpSender);
+      vi.stubGlobal('Worker', class {});
+
+      const description = getE2EESupportDescription();
+
+      expect(description).toContain('E2EE is supported');
+      expect(description).toContain('Insertable Streams');
+      expect(description).toContain('chrome');
+    });
+
+    it('should return description for supported browser with Script Transform', () => {
+      mockUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15'
+      );
+
+      vi.stubGlobal('RTCRtpSender', class {});
+      vi.stubGlobal('RTCRtpScriptTransform', class {});
+      vi.stubGlobal('Worker', class {});
+
+      const description = getE2EESupportDescription();
+
+      expect(description).toContain('E2EE is supported');
+      expect(description).toContain('Script Transform');
+      expect(description).toContain('safari');
+    });
+
+    it('should return unsupported message for Firefox', () => {
+      mockUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
+      );
+
+      vi.stubGlobal('RTCRtpSender', class {});
+      vi.stubGlobal('RTCRtpScriptTransform', undefined);
+
+      const description = getE2EESupportDescription();
+
+      expect(description).toContain('E2EE is not supported');
+      expect(description).toContain('Chrome 86+');
+      expect(description).toContain('Safari 15.4+');
     });
   });
 });
