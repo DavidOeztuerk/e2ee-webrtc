@@ -1,0 +1,123 @@
+---
+# E2EE WebRTC Signaling Server - Kubernetes Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e2ee-signaling
+  labels:
+    app: e2ee-signaling
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: e2ee-signaling
+  template:
+    metadata:
+      labels:
+        app: e2ee-signaling
+    spec:
+      containers:
+        - name: signaling
+          image: ghcr.io/davidoeztuerk/e2ee-webrtc-signaling:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: e2ee-secrets
+                  key: redis-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: e2ee-secrets
+                  key: jwt-secret
+            - name: LOG_LEVEL
+              value: info
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: e2ee-signaling
+spec:
+  selector:
+    app: e2ee-signaling
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: e2ee-signaling
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/websocket-services: e2ee-signaling
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  tls:
+    - hosts:
+        - signal.example.com
+      secretName: e2ee-signaling-tls
+  rules:
+    - host: signal.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: e2ee-signaling
+                port:
+                  number: 80
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: e2ee-signaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: e2ee-signaling
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
