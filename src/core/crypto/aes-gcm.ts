@@ -96,7 +96,7 @@ export async function encryptFrame(
   key: CryptoKey,
   generation: KeyGeneration
 ): Promise<EncryptedFrame> {
-  if (!key) {
+  if (key === null || key === undefined) {
     throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Encryption key is null or undefined', false);
   }
 
@@ -138,7 +138,7 @@ export async function encryptFrame(
  * ```
  */
 export async function decryptFrame(frame: EncryptedFrame, key: CryptoKey): Promise<Uint8Array> {
-  if (!key) {
+  if (key === null || key === undefined) {
     throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Decryption key is null or undefined', false);
   }
 
@@ -312,7 +312,7 @@ export async function computeKeyFingerprint(keyMaterial: Uint8Array): Promise<Ui
  * @returns Formatted string like "AB:CD:EF:..."
  */
 export function formatFingerprint(fingerprint: Uint8Array, length?: number): string {
-  const bytes = length ? fingerprint.slice(0, length) : fingerprint;
+  const bytes = length !== undefined ? fingerprint.slice(0, length) : fingerprint;
   return Array.from(bytes)
     .map((b) => b.toString(16).toUpperCase().padStart(2, '0'))
     .join(':');

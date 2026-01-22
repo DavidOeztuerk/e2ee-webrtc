@@ -9,7 +9,10 @@
  * - Error handling and recovery
  */
 
-import type { EncryptionState } from '../../types';
+/**
+ * Simple encryption status for UI display
+ */
+export type EncryptionStatus = 'none' | 'negotiating' | 'active' | 'rekeying' | 'failed';
 
 /**
  * E2EE session states
@@ -250,20 +253,24 @@ export class E2EEStateMachine {
 
     if (event === 'error' && eventContext !== undefined) {
       const errorCtx = eventContext as { message?: string; code?: string };
-      this.context.errorMessage = errorCtx.message;
-      this.context.errorCode = errorCtx.code;
+      if (errorCtx.message !== undefined) {
+        this.context.errorMessage = errorCtx.message;
+      }
+      if (errorCtx.code !== undefined) {
+        this.context.errorCode = errorCtx.code;
+      }
       this.context.lastGoodState = oldState;
       this.context.retryCount++;
     }
 
     if (event === 'recover' || event === 'reset') {
-      this.context.errorMessage = undefined;
-      this.context.errorCode = undefined;
+      delete this.context.errorMessage;
+      delete this.context.errorCode;
     }
 
     if (event === 'reset') {
       this.context.retryCount = 0;
-      this.context.lastGoodState = undefined;
+      delete this.context.lastGoodState;
       this.context.data = {};
     }
 
@@ -351,27 +358,27 @@ export class E2EEStateMachine {
   }
 
   /**
-   * Converts state to EncryptionState enum
+   * Converts state to EncryptionStatus for UI display
    */
-  toEncryptionState(): EncryptionState {
+  toEncryptionState(): EncryptionStatus {
     switch (this.state) {
       case 'idle':
       case 'initializing':
-        return 'none';
+        return 'none' as const;
       case 'connecting':
       case 'exchanging-keys':
-        return 'negotiating';
+        return 'negotiating' as const;
       case 'encrypting':
       case 'encrypted':
-        return 'active';
+        return 'active' as const;
       case 'rekeying':
-        return 'rekeying';
+        return 'rekeying' as const;
       case 'error':
-        return 'failed';
+        return 'failed' as const;
       case 'disconnected':
-        return 'none';
+        return 'none' as const;
       default:
-        return 'none';
+        return 'none' as const;
     }
   }
 

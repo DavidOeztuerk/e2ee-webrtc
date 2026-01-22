@@ -9,7 +9,11 @@
 
 // KeyGeneration type would be used when implementing full key rotation
 // import type { KeyGeneration } from '../../types';
-import { FrameProcessor, type KeyProvider } from '../../core/frame-processor';
+import {
+  FrameProcessor,
+  type KeyProvider,
+  type FrameProcessorStats,
+} from '../../core/frame-processor';
 
 /**
  * Chrome E2EE configuration
@@ -45,7 +49,12 @@ interface EncodedFrame {
  * Attaches to RTCRtpSender/Receiver.transform to encrypt/decrypt frames
  */
 export class ChromeE2EETransform {
-  private readonly config: Required<Omit<ChromeE2EEConfig, 'workerUrl'>> & { workerUrl?: string };
+  private readonly config: {
+    participantId: string;
+    keyProvider: KeyProvider;
+    debug: boolean;
+    workerUrl: string | undefined;
+  };
   private readonly processor: FrameProcessor;
   private encryptTransform: TransformStream | null = null;
   private decryptTransform: TransformStream | null = null;
@@ -60,7 +69,7 @@ export class ChromeE2EETransform {
 
     this.processor = new FrameProcessor({
       participantId: config.participantId,
-      debug: config.debug,
+      debug: config.debug ?? false,
     });
     this.processor.setKeyProvider(config.keyProvider);
   }
@@ -77,7 +86,7 @@ export class ChromeE2EETransform {
     }
 
     this.encryptTransform = new TransformStream({
-      transform: async (frame: EncodedFrame, controller) => {
+      transform: async (frame: EncodedFrame, controller): Promise<void> => {
         try {
           const plaintext = new Uint8Array(frame.data);
           const encrypted = await this.processor.encryptFrame(plaintext);
@@ -107,7 +116,7 @@ export class ChromeE2EETransform {
     }
 
     this.decryptTransform = new TransformStream({
-      transform: async (frame: EncodedFrame, controller) => {
+      transform: async (frame: EncodedFrame, controller): Promise<void> => {
         try {
           const encrypted = new Uint8Array(frame.data);
           const decrypted = await this.processor.decryptFrame(encrypted);
@@ -139,7 +148,7 @@ export class ChromeE2EETransform {
   /**
    * Gets processing statistics
    */
-  getStats() {
+  getStats(): FrameProcessorStats {
     return this.processor.getStats();
   }
 

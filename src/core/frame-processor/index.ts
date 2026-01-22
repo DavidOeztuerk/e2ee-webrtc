@@ -10,11 +10,11 @@
  * [Generation (1 byte)][IV (12 bytes)][Ciphertext + AuthTag (16 bytes)]
  */
 
-import type { KeyGeneration } from '../../types';
+import type { KeyGeneration, EncryptedFrame } from '../../types';
 import {
   encryptFrame as cryptoEncryptFrame,
   decryptFrame as cryptoDecryptFrame,
-  generateIV,
+  serializeFrame,
 } from '../crypto/aes-gcm';
 
 /** Frame header size: generation (1) + IV (12) = 13 bytes */
@@ -159,14 +159,11 @@ export class FrameProcessor {
     const generation = this.keyProvider!.getCurrentGeneration();
 
     try {
-      const iv = generateIV();
-      const ciphertext = await cryptoEncryptFrame(frameData, key, iv);
+      // Encrypt and get the encrypted frame structure
+      const encryptedFrame = await cryptoEncryptFrame(frameData, key, generation);
 
-      // Build encrypted frame: [generation][iv][ciphertext]
-      const encrypted = new Uint8Array(1 + IV_SIZE + ciphertext.byteLength);
-      encrypted[0] = generation & 0xff;
-      encrypted.set(iv, 1);
-      encrypted.set(new Uint8Array(ciphertext), 1 + IV_SIZE);
+      // Serialize to byte array: [generation][iv][ciphertext]
+      const encrypted = serializeFrame(encryptedFrame);
 
       // Update stats
       this.stats.framesEncrypted++;
@@ -222,7 +219,13 @@ export class FrameProcessor {
     const startTime = performance.now();
 
     try {
-      const decrypted = await cryptoDecryptFrame(metadata.ciphertext, key, metadata.iv);
+      // Build EncryptedFrame from metadata
+      const frame: EncryptedFrame = {
+        generation: metadata.generation,
+        iv: metadata.iv,
+        ciphertext: metadata.ciphertext,
+      };
+      const decrypted = await cryptoDecryptFrame(frame, key);
 
       // Update stats
       this.stats.framesDecrypted++;
@@ -248,7 +251,7 @@ export class FrameProcessor {
    */
   createEncryptTransform(): TransformStream<Uint8Array, Uint8Array> {
     return new TransformStream({
-      transform: async (frame, controller) => {
+      transform: async (frame, controller): Promise<void> => {
         try {
           const encrypted = await this.encryptFrame(frame);
           controller.enqueue(encrypted);
@@ -266,7 +269,7 @@ export class FrameProcessor {
    */
   createDecryptTransform(): TransformStream<Uint8Array, Uint8Array> {
     return new TransformStream({
-      transform: async (frame, controller) => {
+      transform: async (frame, controller): Promise<void> => {
         try {
           const decrypted = await this.decryptFrame(frame);
           if (decrypted !== null) {
@@ -354,7 +357,16 @@ export class FrameProcessor {
     generation?: KeyGeneration
   ): void {
     if (this.errorCallback !== null) {
-      this.errorCallback({ type, message, recoverable, generation });
+      const errorInfo: {
+        type: 'encryption' | 'decryption';
+        message: string;
+        recoverable: boolean;
+        generation?: KeyGeneration;
+      } = { type, message, recoverable };
+      if (generation !== undefined) {
+        errorInfo.generation = generation;
+      }
+      this.errorCallback(errorInfo);
     }
   }
 

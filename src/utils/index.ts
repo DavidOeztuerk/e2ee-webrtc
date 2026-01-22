@@ -30,7 +30,7 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+    binary += String.fromCharCode(bytes[i]!);
   }
   return btoa(binary);
 }
@@ -87,7 +87,7 @@ export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   }
   let result = 0;
   for (let i = 0; i < a.length; i++) {
-    result |= a[i] ^ b[i];
+    result |= a[i]! ^ b[i]!;
   }
   return result === 0;
 }
@@ -119,8 +119,8 @@ export function generateUUID(): string {
   crypto.getRandomValues(bytes);
 
   // Set version (4) and variant (10xx)
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
 
   const hex = arrayBufferToHex(bytes.buffer);
   return [

@@ -85,11 +85,11 @@ export async function deriveSharedSecret(
   privateKey: CryptoKey,
   publicKey: CryptoKey
 ): Promise<Uint8Array> {
-  if (!privateKey) {
+  if (privateKey === null || privateKey === undefined) {
     throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Private key is null or undefined', false);
   }
 
-  if (!publicKey) {
+  if (publicKey === null || publicKey === undefined) {
     throw new E2EEError(E2EEErrorCode.INVALID_KEY, 'Public key is null or undefined', false);
   }
 

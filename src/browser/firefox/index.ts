@@ -12,7 +12,11 @@
 
 // KeyGeneration type would be used when implementing full key rotation
 // import type { KeyGeneration } from '../../types';
-import { FrameProcessor, type KeyProvider } from '../../core/frame-processor';
+import {
+  FrameProcessor,
+  type KeyProvider,
+  type FrameProcessorStats,
+} from '../../core/frame-processor';
 
 /**
  * Firefox E2EE configuration
@@ -83,7 +87,7 @@ export class FirefoxE2EETransform {
 
     this.processor = new FrameProcessor({
       participantId: config.participantId,
-      debug: config.debug,
+      debug: config.debug ?? false,
     });
     this.processor.setKeyProvider(config.keyProvider);
 
@@ -121,7 +125,7 @@ export class FirefoxE2EETransform {
     }
 
     this.encryptTransform = new TransformStream({
-      transform: async (frame: EncodedFrame, controller) => {
+      transform: async (frame: EncodedFrame, controller): Promise<void> => {
         try {
           const plaintext = new Uint8Array(frame.data);
           const encrypted = await this.processor.encryptFrame(plaintext);
@@ -154,7 +158,7 @@ export class FirefoxE2EETransform {
     }
 
     this.decryptTransform = new TransformStream({
-      transform: async (frame: EncodedFrame, controller) => {
+      transform: async (frame: EncodedFrame, controller): Promise<void> => {
         try {
           const encrypted = new Uint8Array(frame.data);
           const decrypted = await this.processor.decryptFrame(encrypted);
@@ -186,7 +190,7 @@ export class FirefoxE2EETransform {
   /**
    * Gets processing statistics
    */
-  getStats() {
+  getStats(): FrameProcessorStats {
     return this.processor.getStats();
   }
 
@@ -220,7 +224,7 @@ export function detectFirefoxCapabilities(): FirefoxCapabilities {
   // Detect Firefox version
   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const firefoxMatch = userAgent.match(/Firefox\/(\d+)/);
-  if (firefoxMatch !== null) {
+  if (firefoxMatch !== null && firefoxMatch[1] !== undefined) {
     capabilities.version = parseInt(firefoxMatch[1], 10);
   }
 

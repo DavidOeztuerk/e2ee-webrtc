@@ -69,11 +69,11 @@ export class SafariE2EETransform {
     this.worker = new Worker(this.config.workerUrl, { type: 'module' });
 
     // Set up message handler
-    this.worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
+    this.worker.onmessage = (event: MessageEvent<WorkerMessage>): void => {
       this.handleWorkerMessage(event.data);
     };
 
-    this.worker.onerror = (error) => {
+    this.worker.onerror = (error: ErrorEvent): void => {
       this.log('Worker error:', error);
     };
 
@@ -180,11 +180,11 @@ export class SafariE2EETransform {
     }
 
     return new Promise((resolve) => {
-      const handler = (event: MessageEvent<WorkerMessage>) => {
+      const handler = (event: MessageEvent<WorkerMessage>): void => {
         if (event.data.type === 'stats') {
           this.worker?.removeEventListener('message', handler);
           resolve(
-            event.data.stats as {
+            event.data['stats'] as {
               framesEncrypted: number;
               framesDecrypted: number;
               encryptionErrors: number;
@@ -212,11 +212,11 @@ export class SafariE2EETransform {
 
   private waitForReady(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      const timeout = setTimeout((): void => {
         reject(new Error('Worker initialization timeout'));
       }, 5000);
 
-      const handler = (event: MessageEvent<WorkerMessage>) => {
+      const handler = (event: MessageEvent<WorkerMessage>): void => {
         if (event.data.type === 'ready') {
           clearTimeout(timeout);
           this.worker?.removeEventListener('message', handler);
@@ -224,7 +224,7 @@ export class SafariE2EETransform {
         } else if (event.data.type === 'error') {
           clearTimeout(timeout);
           this.worker?.removeEventListener('message', handler);
-          reject(new Error(event.data.message as string));
+          reject(new Error(event.data['message'] as string));
         }
       };
 
@@ -235,10 +235,10 @@ export class SafariE2EETransform {
   private handleWorkerMessage(message: WorkerMessage): void {
     switch (message.type) {
       case 'error':
-        this.log('Worker error:', message.code, message.message);
+        this.log('Worker error:', message['code'], message['message']);
         break;
       case 'key-ack':
-        this.log('Key acknowledged, generation:', message.generation);
+        this.log('Key acknowledged, generation:', message['generation']);
         break;
       default:
         // Stats and other messages handled elsewhere
