@@ -28,8 +28,8 @@
       "types": "./dist/types/sfu/index.d.ts"
     },
     "./workers/*": {
-      "import": "./dist/esm/workers/*.js",
-      "require": "./dist/cjs/workers/*.js"
+      "import": "./dist/workers/*.js",
+      "default": "./dist/workers/*.js"
     }
   },
   "files": [
