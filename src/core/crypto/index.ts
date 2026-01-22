@@ -35,3 +35,16 @@ export {
   formatFingerprint,
   deriveEncryptionKey,
 } from './ecdh';
+
+// Replay protection
+export {
+  ReplayProtector,
+  ReplayProtectionManager,
+  getNextSequence,
+  resetSequenceCounter,
+  serializeSequence,
+  deserializeSequence,
+  SEQUENCE_SIZE,
+  type ReplayProtectionConfig,
+  type ReplayProtectionStats,
+} from './replay-protection';
