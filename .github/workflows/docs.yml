@@ -44,10 +44,9 @@ jobs:
           cp -r docs/* _site/
           cp -r demo/dist _site/demo
 
+      # Note: Enable Pages in repo settings: Settings → Pages → Source: GitHub Actions
       - name: Setup Pages
         uses: actions/configure-pages@v4
-        with:
-          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
