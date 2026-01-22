@@ -16,7 +16,8 @@ import WebSocket from 'ws';
 const SKIP_INTEGRATION = !process.env.CI && !process.env.INTEGRATION_TESTS;
 
 const SIGNALING_URL = process.env.SIGNALING_URL || 'ws://localhost:3001';
-const HEALTH_URL = SIGNALING_URL.replace('ws://', 'http://').replace('wss://', 'https://') + '/health';
+const HEALTH_URL =
+  SIGNALING_URL.replace('ws://', 'http://').replace('wss://', 'https://') + '/health';
 
 interface SignalingMessage {
   type: string;
@@ -47,7 +48,9 @@ function waitForMessage(ws: WebSocket, type: string, timeout = 5000): Promise<Si
     }, timeout);
 
     const handler = (data: WebSocket.Data) => {
-      const message = JSON.parse(data.toString()) as SignalingMessage;
+      // WebSocket JSON messages are sent as strings or buffers
+      const dataString = Buffer.isBuffer(data) ? data.toString('utf-8') : (data as string);
+      const message = JSON.parse(dataString) as SignalingMessage;
       if (message.type === type) {
         clearTimeout(timer);
         ws.off('message', handler);

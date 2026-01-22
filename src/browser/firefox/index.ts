@@ -10,7 +10,8 @@
  * This module provides a unified API that adapts to Firefox's capabilities.
  */
 
-import type { KeyGeneration } from '../../types';
+// KeyGeneration type would be used when implementing full key rotation
+// import type { KeyGeneration } from '../../types';
 import { FrameProcessor, type KeyProvider } from '../../core/frame-processor';
 
 /**

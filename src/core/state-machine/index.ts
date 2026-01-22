@@ -76,14 +76,36 @@ const TRANSITIONS: StateTransition[] = [
   { from: 'rekeying', to: 'encrypted', event: 'rekey-complete' },
 
   // Error handling
-  { from: ['initializing', 'connecting', 'exchanging-keys', 'encrypting', 'encrypted', 'rekeying'], to: 'error', event: 'error' },
+  {
+    from: ['initializing', 'connecting', 'exchanging-keys', 'encrypting', 'encrypted', 'rekeying'],
+    to: 'error',
+    event: 'error',
+  },
   { from: 'error', to: 'connecting', event: 'recover' },
 
   // Disconnection
-  { from: ['connecting', 'exchanging-keys', 'encrypting', 'encrypted', 'rekeying', 'error'], to: 'disconnected', event: 'disconnect' },
+  {
+    from: ['connecting', 'exchanging-keys', 'encrypting', 'encrypted', 'rekeying', 'error'],
+    to: 'disconnected',
+    event: 'disconnect',
+  },
 
   // Reset
-  { from: ['idle', 'initializing', 'connecting', 'exchanging-keys', 'encrypting', 'encrypted', 'rekeying', 'error', 'disconnected'], to: 'idle', event: 'reset' },
+  {
+    from: [
+      'idle',
+      'initializing',
+      'connecting',
+      'exchanging-keys',
+      'encrypting',
+      'encrypted',
+      'rekeying',
+      'error',
+      'disconnected',
+    ],
+    to: 'idle',
+    event: 'reset',
+  },
 ];
 
 /**
@@ -283,9 +305,7 @@ export class E2EEStateMachine {
     const validEvents: E2EEEvent[] = [];
 
     for (const transition of TRANSITIONS) {
-      const fromStates = Array.isArray(transition.from)
-        ? transition.from
-        : [transition.from];
+      const fromStates = Array.isArray(transition.from) ? transition.from : [transition.from];
 
       if (fromStates.includes(this.state)) {
         validEvents.push(transition.event);
@@ -366,9 +386,7 @@ export class E2EEStateMachine {
     for (const transition of TRANSITIONS) {
       if (transition.event !== event) continue;
 
-      const fromStates = Array.isArray(transition.from)
-        ? transition.from
-        : [transition.from];
+      const fromStates = Array.isArray(transition.from) ? transition.from : [transition.from];
 
       if (fromStates.includes(this.state)) {
         return transition;

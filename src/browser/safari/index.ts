@@ -183,12 +183,14 @@ export class SafariE2EETransform {
       const handler = (event: MessageEvent<WorkerMessage>) => {
         if (event.data.type === 'stats') {
           this.worker?.removeEventListener('message', handler);
-          resolve(event.data.stats as {
-            framesEncrypted: number;
-            framesDecrypted: number;
-            encryptionErrors: number;
-            decryptionErrors: number;
-          });
+          resolve(
+            event.data.stats as {
+              framesEncrypted: number;
+              framesDecrypted: number;
+              encryptionErrors: number;
+              decryptionErrors: number;
+            }
+          );
         }
       };
 

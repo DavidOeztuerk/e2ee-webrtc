@@ -222,11 +222,7 @@ export class FrameProcessor {
     const startTime = performance.now();
 
     try {
-      const decrypted = await cryptoDecryptFrame(
-        metadata.ciphertext,
-        key,
-        metadata.iv
-      );
+      const decrypted = await cryptoDecryptFrame(metadata.ciphertext, key, metadata.iv);
 
       // Update stats
       this.stats.framesDecrypted++;

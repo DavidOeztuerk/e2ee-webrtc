@@ -10,7 +10,7 @@ import type { KeyGeneration } from '../../src/types';
 
 // Mock Web Crypto API for tests
 const mockSubtleCrypto = {
-  generateKey: vi.fn(async () => ({} as CryptoKey)),
+  generateKey: vi.fn(async () => ({}) as CryptoKey),
   encrypt: vi.fn(async (_algo: unknown, _key: unknown, data: ArrayBuffer) => {
     // Simulate AES-GCM encryption: add 16 bytes auth tag
     const plaintext = new Uint8Array(data);
@@ -23,10 +23,10 @@ const mockSubtleCrypto = {
     const ciphertext = new Uint8Array(data);
     return ciphertext.slice(0, ciphertext.length - 16).buffer;
   }),
-  importKey: vi.fn(async () => ({} as CryptoKey)),
+  importKey: vi.fn(async () => ({}) as CryptoKey),
   exportKey: vi.fn(async () => new ArrayBuffer(32)),
   deriveBits: vi.fn(async () => new ArrayBuffer(32)),
-  deriveKey: vi.fn(async () => ({} as CryptoKey)),
+  deriveKey: vi.fn(async () => ({}) as CryptoKey),
 };
 
 // Mock crypto.getRandomValues

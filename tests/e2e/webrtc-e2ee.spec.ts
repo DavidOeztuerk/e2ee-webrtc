@@ -36,7 +36,11 @@ async function createPeerPage(context: BrowserContext, name: string): Promise<Pa
 /**
  * Helper to wait for E2EE state
  */
-async function waitForE2EEState(page: Page, expectedState: string, timeout = TEST_CONFIG.timeout): Promise<void> {
+async function waitForE2EEState(
+  page: Page,
+  expectedState: string,
+  timeout = TEST_CONFIG.timeout
+): Promise<void> {
   await page.waitForFunction(
     (state) => {
       const e2eeState = (window as unknown as { e2eeState?: string }).e2eeState;
@@ -57,18 +61,24 @@ async function getE2EEStats(page: Page): Promise<{
   decryptionErrors: number;
 }> {
   return await page.evaluate(() => {
-    const stats = (window as unknown as { e2eeStats?: {
-      framesEncrypted: number;
-      framesDecrypted: number;
-      encryptionErrors: number;
-      decryptionErrors: number;
-    } }).e2eeStats;
-    return stats || {
-      framesEncrypted: 0,
-      framesDecrypted: 0,
-      encryptionErrors: 0,
-      decryptionErrors: 0,
-    };
+    const stats = (
+      window as unknown as {
+        e2eeStats?: {
+          framesEncrypted: number;
+          framesDecrypted: number;
+          encryptionErrors: number;
+          decryptionErrors: number;
+        };
+      }
+    ).e2eeStats;
+    return (
+      stats || {
+        framesEncrypted: 0,
+        framesDecrypted: 0,
+        encryptionErrors: 0,
+        decryptionErrors: 0,
+      }
+    );
   });
 }
 
@@ -106,7 +116,8 @@ test.describe('WebRTC E2EE End-to-End Tests', () => {
 
       // Bob joins the room
       await bobPage.evaluate(async (id) => {
-        const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> }).joinRoom;
+        const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> })
+          .joinRoom;
         await joinRoom(id);
       }, roomId);
 
@@ -153,7 +164,8 @@ test.describe('WebRTC E2EE End-to-End Tests', () => {
       });
 
       await bobPage.evaluate(async (id) => {
-        const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> }).joinRoom;
+        const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> })
+          .joinRoom;
         await joinRoom(id);
       }, roomId);
 
@@ -164,7 +176,9 @@ test.describe('WebRTC E2EE End-to-End Tests', () => {
 
       // Get initial key generation
       const initialGeneration = await alicePage.evaluate(() => {
-        return (window as unknown as { getCurrentKeyGeneration: () => number }).getCurrentKeyGeneration();
+        return (
+          window as unknown as { getCurrentKeyGeneration: () => number }
+        ).getCurrentKeyGeneration();
       });
 
       // Trigger key rotation
@@ -179,7 +193,9 @@ test.describe('WebRTC E2EE End-to-End Tests', () => {
 
       // Verify key generation increased
       const newGeneration = await alicePage.evaluate(() => {
-        return (window as unknown as { getCurrentKeyGeneration: () => number }).getCurrentKeyGeneration();
+        return (
+          window as unknown as { getCurrentKeyGeneration: () => number }
+        ).getCurrentKeyGeneration();
       });
 
       expect(newGeneration).toBeGreaterThan(initialGeneration);
@@ -219,7 +235,8 @@ test.describe('WebRTC E2EE End-to-End Tests', () => {
       });
 
       await bobPage.evaluate(async (id) => {
-        const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> }).joinRoom;
+        const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> })
+          .joinRoom;
         await joinRoom(id);
       }, roomId);
 
@@ -280,11 +297,13 @@ test.describe('WebRTC E2EE End-to-End Tests', () => {
       // Bob and Charlie join
       await Promise.all([
         pages[1].evaluate(async (id) => {
-          const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> }).joinRoom;
+          const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> })
+            .joinRoom;
           await joinRoom(id);
         }, roomId),
         pages[2].evaluate(async (id) => {
-          const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> }).joinRoom;
+          const joinRoom = (window as unknown as { joinRoom: (id: string) => Promise<void> })
+            .joinRoom;
           await joinRoom(id);
         }, roomId),
       ]);
@@ -394,7 +413,9 @@ test.describe('Browser Compatibility Tests', () => {
     const result = await page.evaluate(() => {
       // Simulate E2EE not being supported
       const handleUnsupportedE2EE = (
-        window as unknown as { handleUnsupportedE2EE?: () => { success: boolean; fallback: string } }
+        window as unknown as {
+          handleUnsupportedE2EE?: () => { success: boolean; fallback: string };
+        }
       ).handleUnsupportedE2EE;
 
       if (handleUnsupportedE2EE) {

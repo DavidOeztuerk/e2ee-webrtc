@@ -7,7 +7,8 @@
  * Available in Chrome 86+, Edge 86+, Opera 72+
  */
 
-import type { KeyGeneration } from '../../types';
+// KeyGeneration type would be used when implementing full key rotation
+// import type { KeyGeneration } from '../../types';
 import { FrameProcessor, type KeyProvider } from '../../core/frame-processor';
 
 /**

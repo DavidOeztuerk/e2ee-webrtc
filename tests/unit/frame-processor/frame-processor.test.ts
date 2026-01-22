@@ -43,7 +43,9 @@ describe('FrameProcessor', () => {
     // Create mock key provider
     mockKeyProvider = {
       getEncryptionKey: vi.fn(() => mockKey),
-      getDecryptionKey: vi.fn((gen: KeyGeneration) => (gen === (0 as KeyGeneration) ? mockKey : null)),
+      getDecryptionKey: vi.fn((gen: KeyGeneration) =>
+        gen === (0 as KeyGeneration) ? mockKey : null
+      ),
       getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
     };
 
@@ -112,7 +114,9 @@ describe('FrameProcessor', () => {
 
       const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
 
-      await expect(strictProcessor.encryptFrame(plaintext)).rejects.toThrow('No encryption key available');
+      await expect(strictProcessor.encryptFrame(plaintext)).rejects.toThrow(
+        'No encryption key available'
+      );
     });
   });
 
@@ -176,7 +180,9 @@ describe('FrameProcessor', () => {
     it('should extract generation, IV, and ciphertext', () => {
       const generation = 7;
       const iv = new Uint8Array(IV_SIZE).fill(42);
-      const ciphertext = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+      const ciphertext = new Uint8Array([
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      ]);
 
       const encrypted = new Uint8Array(1 + IV_SIZE + ciphertext.length);
       encrypted[0] = generation;
