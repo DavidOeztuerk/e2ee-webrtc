@@ -1,0 +1,104 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - redis-server
+  - redis-tools
+  - curl
+  - htop
+
+write_files:
+  - path: /etc/redis/redis.conf
+    content: |
+      # Network
+      bind 0.0.0.0
+      port 6379
+      protected-mode yes
+
+      # Security
+      requirepass ${redis_password}
+
+      # Memory
+      maxmemory 1gb
+      maxmemory-policy volatile-lru
+
+      # Persistence
+      save 900 1
+      save 300 10
+      save 60 10000
+      appendonly yes
+      appendfsync everysec
+
+      # Logging
+      loglevel notice
+      logfile /var/log/redis/redis-server.log
+
+      # Performance
+      tcp-backlog 511
+      tcp-keepalive 300
+      databases 16
+
+      # Limits
+      maxclients 10000
+
+      # Snapshotting
+      dir /var/lib/redis
+      dbfilename dump.rdb
+
+      # Replication (for future scaling)
+      # replicaof <masterip> <masterport>
+      # masterauth <master-password>
+
+      # Security hardening
+      rename-command FLUSHDB ""
+      rename-command FLUSHALL ""
+      rename-command DEBUG ""
+      rename-command CONFIG ""
+    permissions: '0640'
+
+  - path: /usr/local/bin/mount-data-volume.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      # Wait for volume to be attached
+      sleep 10
+
+      # Find the data volume
+      DATA_DEVICE=$(lsblk -o NAME,SIZE,TYPE | grep disk | grep -v "$(lsblk -o NAME,MOUNTPOINT | grep '/$' | awk '{print $1}' | sed 's/[0-9]*$//')" | awk '{print "/dev/"$1}' | head -1)
+
+      if [ -n "$DATA_DEVICE" ]; then
+        # Create mount point
+        mkdir -p /mnt/redis-data
+
+        # Check if already formatted
+        if ! blkid $DATA_DEVICE; then
+          mkfs.ext4 $DATA_DEVICE
+        fi
+
+        # Mount
+        mount $DATA_DEVICE /mnt/redis-data
+
+        # Add to fstab
+        echo "$DATA_DEVICE /mnt/redis-data ext4 defaults 0 2" >> /etc/fstab
+
+        # Create redis data directory
+        mkdir -p /mnt/redis-data/redis
+        chown redis:redis /mnt/redis-data/redis
+
+        # Update redis config to use mounted volume
+        sed -i 's|dir /var/lib/redis|dir /mnt/redis-data/redis|' /etc/redis/redis.conf
+
+        echo "Data volume mounted at /mnt/redis-data"
+      fi
+
+runcmd:
+  - mkdir -p /var/log/redis
+  - chown redis:redis /var/log/redis
+  - /usr/local/bin/mount-data-volume.sh || true
+  - systemctl enable redis-server
+  - systemctl restart redis-server
+  # Backup cron
+  - echo "0 */6 * * * root redis-cli -a '${redis_password}' BGSAVE" >> /etc/crontab

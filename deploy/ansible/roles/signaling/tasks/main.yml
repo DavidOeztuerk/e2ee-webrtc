@@ -1,0 +1,60 @@
+# Signaling server role tasks
+---
+- name: Create application directory
+  file:
+    path: /opt/e2ee-webrtc
+    state: directory
+    owner: e2ee
+    group: e2ee
+    mode: '0755'
+
+- name: Create environment file
+  template:
+    src: env.j2
+    dest: /opt/e2ee-webrtc/.env
+    owner: e2ee
+    group: e2ee
+    mode: '0600'
+  notify: restart signaling
+
+- name: Create docker-compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/e2ee-webrtc/docker-compose.yml
+    owner: e2ee
+    group: e2ee
+    mode: '0644'
+  notify: restart signaling
+
+- name: Create systemd service
+  template:
+    src: e2ee-signaling.service.j2
+    dest: /etc/systemd/system/e2ee-signaling.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart signaling
+
+- name: Allow signaling ports in UFW
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "80"
+    - "443"
+    - "3001"
+
+- name: Pull Docker image
+  docker_image:
+    name: "{{ signaling_image }}"
+    source: pull
+    force_source: yes
+  when: signaling_image is defined
+
+- name: Enable and start signaling service
+  systemd:
+    name: e2ee-signaling
+    enabled: yes
+    state: started
+    daemon_reload: yes

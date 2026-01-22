@@ -1,0 +1,69 @@
+# Common role tasks
+---
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Configure timezone
+  timezone:
+    name: "{{ timezone | default('UTC') }}"
+
+- name: Configure UFW defaults
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: Allow SSH
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+
+- name: Configure fail2ban
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+  notify: restart fail2ban
+
+- name: Enable fail2ban
+  systemd:
+    name: fail2ban
+    enabled: yes
+    state: started
+
+- name: Configure automatic security updates
+  template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: '0644'
+
+- name: Configure sysctl for performance
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+    state: present
+    reload: yes
+  loop:
+    - { key: 'net.core.rmem_max', value: '16777216' }
+    - { key: 'net.core.wmem_max', value: '16777216' }
+    - { key: 'net.ipv4.tcp_rmem', value: '4096 87380 16777216' }
+    - { key: 'net.ipv4.tcp_wmem', value: '4096 65536 16777216' }
+    - { key: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
+    - { key: 'net.core.default_qdisc', value: 'fq' }
+    - { key: 'net.ipv4.tcp_fastopen', value: '3' }
+
+- name: Create application user
+  user:
+    name: e2ee
+    shell: /bin/bash
+    groups: "{{ 'docker' if role == 'signaling' else '' }}"
+    create_home: yes

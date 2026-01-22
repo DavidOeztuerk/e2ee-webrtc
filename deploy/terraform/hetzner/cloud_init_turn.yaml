@@ -1,0 +1,105 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - coturn
+  - certbot
+  - curl
+  - htop
+
+write_files:
+  - path: /etc/turnserver.conf
+    content: |
+      # Network settings
+      listening-port=3478
+      tls-listening-port=5349
+      listening-ip=0.0.0.0
+
+      # Authentication
+      use-auth-secret
+      static-auth-secret=${turn_secret}
+      realm=${realm}
+
+      # TLS (will be configured after certbot)
+      # cert=/etc/letsencrypt/live/${realm}/fullchain.pem
+      # pkey=/etc/letsencrypt/live/${realm}/privkey.pem
+
+      # TURN relay ports
+      min-port=49152
+      max-port=65535
+
+      # Logging
+      log-file=/var/log/turnserver/turnserver.log
+      verbose
+
+      # Security
+      fingerprint
+      lt-cred-mech
+      no-multicast-peers
+      no-cli
+      no-tlsv1
+      no-tlsv1_1
+
+      # Performance
+      proc-quota=100
+      stale-nonce=600
+      max-allocate-lifetime=3600
+      channel-lifetime=600
+      permission-lifetime=300
+
+      # Limits
+      total-quota=1000
+      bps-capacity=0
+      user-quota=12
+
+      # WebRTC optimizations
+      mobility
+      no-tcp-relay
+      denied-peer-ip=10.0.0.0-10.255.255.255
+      denied-peer-ip=192.168.0.0-192.168.255.255
+      denied-peer-ip=172.16.0.0-172.31.255.255
+    permissions: '0640'
+
+  - path: /usr/local/bin/configure-turn.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      # Get public IP
+      PUBLIC_IP=$(curl -s http://169.254.169.254/hetzner/v1/metadata/public-ipv4 || curl -s ifconfig.me)
+
+      # Update turnserver.conf with actual IP
+      sed -i "s/^external-ip=.*/external-ip=$PUBLIC_IP/" /etc/turnserver.conf 2>/dev/null || \
+        echo "external-ip=$PUBLIC_IP" >> /etc/turnserver.conf
+      sed -i "s/^relay-ip=.*/relay-ip=$PUBLIC_IP/" /etc/turnserver.conf 2>/dev/null || \
+        echo "relay-ip=$PUBLIC_IP" >> /etc/turnserver.conf
+
+      echo "TURN server configured with public IP: $PUBLIC_IP"
+
+  - path: /etc/systemd/system/turn-configure.service
+    content: |
+      [Unit]
+      Description=Configure TURN server with public IP
+      Before=coturn.service
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/configure-turn.sh
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - mkdir -p /var/log/turnserver
+  - chown turnserver:turnserver /var/log/turnserver
+  - systemctl enable turn-configure
+  - systemctl start turn-configure
+  - systemctl enable coturn
+  - systemctl start coturn
+  # Set up certbot renewal
+  - echo "0 0 1 * * root certbot renew --quiet --deploy-hook 'systemctl reload coturn'" >> /etc/crontab

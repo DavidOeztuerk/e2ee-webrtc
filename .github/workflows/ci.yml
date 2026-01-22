@@ -28,8 +28,8 @@ jobs:
       - name: Check formatting
         run: npx prettier --check "src/**/*.ts" "tests/**/*.ts"
 
-  test:
-    name: Test
+  test-unit:
+    name: Unit Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -46,8 +46,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm run test:coverage
+      - name: Run unit tests
+        run: npm run test:unit -- --coverage
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == 20
@@ -56,10 +56,64 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
 
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test-unit]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build signaling server
+        run: |
+          cd server/signaling
+          npm ci
+          npm run build || true
+
+      - name: Start signaling server
+        run: |
+          cd server/signaling
+          npm start &
+          sleep 5
+        env:
+          NODE_ENV: test
+          PORT: 3001
+          REDIS_URL: redis://localhost:6379
+
+      - name: Wait for services
+        run: |
+          timeout 30 bash -c 'until curl -s http://localhost:3001/health; do sleep 1; done'
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          CI: true
+          SIGNALING_URL: ws://localhost:3001
+          REDIS_URL: redis://localhost:6379
+
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test-unit]
     steps:
       - uses: actions/checkout@v4
 

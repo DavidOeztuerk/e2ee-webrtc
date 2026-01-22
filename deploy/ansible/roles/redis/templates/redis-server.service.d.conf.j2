@@ -1,0 +1,7 @@
+[Service]
+# Increase limits for Redis
+LimitNOFILE=65535
+LimitNPROC=65535
+
+# Memory overcommit
+ExecStartPre=/sbin/sysctl vm.overcommit_memory=1

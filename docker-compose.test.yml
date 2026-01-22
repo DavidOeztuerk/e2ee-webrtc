@@ -1,0 +1,60 @@
+version: '3.8'
+
+# Docker Compose for Integration Tests
+# Used in CI pipeline to test real services
+
+services:
+  # Redis for session storage
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Signaling server
+  signaling:
+    build:
+      context: ./server/signaling
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=test
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=debug
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Test runner - waits for services and runs tests
+  test-runner:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - CI=true
+      - SIGNALING_URL=ws://signaling:3001
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      signaling:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npm ci && npm run test:integration"
+
+networks:
+  default:
+    driver: bridge

@@ -1,0 +1,58 @@
+# TURN server role tasks
+---
+- name: Install coturn
+  apt:
+    name:
+      - coturn
+      - certbot
+    state: present
+
+- name: Create coturn log directory
+  file:
+    path: /var/log/turnserver
+    state: directory
+    owner: turnserver
+    group: turnserver
+    mode: '0755'
+
+- name: Configure coturn
+  template:
+    src: turnserver.conf.j2
+    dest: /etc/turnserver.conf
+    owner: root
+    group: turnserver
+    mode: '0640'
+  notify: restart coturn
+
+- name: Allow TURN ports in UFW
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop:
+    - { port: "3478", proto: tcp }
+    - { port: "3478", proto: udp }
+    - { port: "5349", proto: tcp }
+    - { port: "49152:65535", proto: udp }
+
+- name: Enable coturn service
+  lineinfile:
+    path: /etc/default/coturn
+    regexp: '^#?TURNSERVER_ENABLED='
+    line: 'TURNSERVER_ENABLED=1'
+  notify: restart coturn
+
+- name: Enable and start coturn
+  systemd:
+    name: coturn
+    enabled: yes
+    state: started
+
+- name: Set up certificate renewal cron
+  cron:
+    name: "Certbot renewal"
+    minute: "0"
+    hour: "0"
+    day: "1"
+    job: "certbot renew --quiet --deploy-hook 'systemctl reload coturn'"
+    user: root

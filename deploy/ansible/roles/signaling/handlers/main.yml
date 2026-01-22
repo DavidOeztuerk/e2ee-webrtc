@@ -1,0 +1,10 @@
+# Signaling handlers
+---
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart signaling
+  systemd:
+    name: e2ee-signaling
+    state: restarted

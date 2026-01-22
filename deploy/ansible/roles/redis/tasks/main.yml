@@ -1,0 +1,65 @@
+# Redis server role tasks
+---
+- name: Install Redis
+  apt:
+    name:
+      - redis-server
+      - redis-tools
+    state: present
+
+- name: Create Redis log directory
+  file:
+    path: /var/log/redis
+    state: directory
+    owner: redis
+    group: redis
+    mode: '0755'
+
+- name: Configure Redis
+  template:
+    src: redis.conf.j2
+    dest: /etc/redis/redis.conf
+    owner: redis
+    group: redis
+    mode: '0640'
+  notify: restart redis
+
+- name: Create Redis data directory
+  file:
+    path: "{{ redis_data_dir | default('/var/lib/redis') }}"
+    state: directory
+    owner: redis
+    group: redis
+    mode: '0750'
+
+- name: Configure Redis systemd override
+  template:
+    src: redis-server.service.d.conf.j2
+    dest: /etc/systemd/system/redis-server.service.d/override.conf
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart redis
+
+- name: Allow Redis port in UFW (internal only)
+  ufw:
+    rule: allow
+    port: "{{ redis_port | default(6379) }}"
+    proto: tcp
+    from_ip: "10.0.0.0/8"
+
+- name: Enable and start Redis
+  systemd:
+    name: redis-server
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+- name: Set up Redis backup cron
+  cron:
+    name: "Redis BGSAVE"
+    minute: "0"
+    hour: "*/6"
+    job: "redis-cli -a '{{ redis_password }}' BGSAVE"
+    user: root
+  when: redis_backup_enabled | default(true)

@@ -1,0 +1,6 @@
+# TURN handlers
+---
+- name: restart coturn
+  systemd:
+    name: coturn
+    state: restarted

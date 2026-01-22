@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  signaling:
+    image: {{ signaling_image | default('ghcr.io/your-org/e2ee-signaling:latest') }}
+    ports:
+      - "{{ signaling_port | default(3001) }}:3001"
+      - "80:80"
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '{{ signaling_cpu_limit | default("2") }}'
+          memory: {{ signaling_memory_limit | default("2G") }}
+        reservations:
+          cpus: '{{ signaling_cpu_reservation | default("0.5") }}'
+          memory: {{ signaling_memory_reservation | default("512M") }}
+{% if metrics_enabled | default(false) %}
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port={{ metrics_port | default(9090) }}"
+{% endif %}
