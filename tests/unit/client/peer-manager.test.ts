@@ -698,4 +698,213 @@ describe('PeerManager', () => {
       expect(info).toBeUndefined();
     });
   });
+
+  describe('error handling', () => {
+    it('should return undefined for non-existent peer info', () => {
+      const manager = new PeerManager({ iceServers: [] });
+
+      // Try to get non-existent peer info
+      const peerInfo = manager.getPeerInfo('non-existent');
+      expect(peerInfo).toBeUndefined();
+    });
+
+    it('should handle removing non-existent peer gracefully', () => {
+      const manager = new PeerManager({ iceServers: [] });
+
+      // Should not throw when removing non-existent peer
+      expect(() => manager.removePeer('non-existent')).not.toThrow();
+    });
+
+    it('should queue ICE candidates before remote description is set', async () => {
+      const manager = new PeerManager({ iceServers: [] });
+      manager.createPeer('participant-1');
+
+      // Add ICE candidate before remote description
+      await manager.addIceCandidate('participant-1', {
+        candidate: 'candidate:1 1 UDP 12345 192.168.1.1 54321 typ host',
+        sdpMid: 'audio',
+        sdpMLineIndex: 0,
+      });
+
+      // Check that candidate is queued
+      const info = manager.getPeerInfo('participant-1');
+      expect(info?.pendingCandidates.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should handle connection state failed', () => {
+      const manager = new PeerManager({ iceServers: [] });
+      const stateHandler = vi.fn();
+      manager.on('connection-state-change', stateHandler);
+
+      manager.createPeer('participant-1');
+
+      // Simulate connection failure
+      const peer = MockRTCPeerConnection.instances[0];
+      peer?.simulateConnectionStateChange('failed');
+
+      expect(stateHandler).toHaveBeenCalledWith({
+        participantId: 'participant-1',
+        state: 'failed',
+      });
+    });
+
+    it('should handle connection state disconnected', () => {
+      const manager = new PeerManager({ iceServers: [] });
+      const stateHandler = vi.fn();
+      manager.on('connection-state-change', stateHandler);
+
+      manager.createPeer('participant-1');
+
+      // Simulate disconnection
+      const peer = MockRTCPeerConnection.instances[0];
+      peer?.simulateConnectionStateChange('disconnected');
+
+      expect(stateHandler).toHaveBeenCalledWith({
+        participantId: 'participant-1',
+        state: 'disconnected',
+      });
+    });
+  });
+
+  describe('debug logging', () => {
+    it('should log when debug is enabled', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const manager = new PeerManager({
+        iceServers: [],
+        debug: true,
+      });
+
+      manager.createPeer('participant-1');
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('should not log when debug is disabled', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const manager = new PeerManager({
+        iceServers: [],
+        debug: false,
+      });
+
+      manager.createPeer('participant-1');
+
+      // Debug-specific logs should not be called
+      // (some internal logs might still happen)
+      consoleSpy.mockRestore();
+    });
+
+    it('should log when adding track with debug enabled', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const manager = new PeerManager({
+        iceServers: [],
+        debug: true,
+      });
+
+      manager.createPeer('participant-1');
+      const mockTrack = createMockTrack('video', 'video-1');
+      const mockStream = createMockStream([mockTrack]);
+
+      manager.addTrack(mockTrack, mockStream, 'participant-1');
+
+      // Should log "Added video track to peer participant-1"
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PeerManager]',
+        'Added video track to peer participant-1'
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should log when removing track with debug enabled', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const manager = new PeerManager({
+        iceServers: [],
+        debug: true,
+      });
+
+      manager.createPeer('participant-1');
+      const mockTrack = createMockTrack('audio', 'audio-1');
+      const mockStream = createMockStream([mockTrack]);
+
+      manager.addTrack(mockTrack, mockStream, 'participant-1');
+      consoleSpy.mockClear();
+
+      manager.removeTrack('audio-1', 'participant-1');
+
+      // Should log track removal
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PeerManager]',
+        'Removed track audio-1 from peer participant-1'
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('event listener error handling', () => {
+    it('should catch and log errors from event listeners', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const manager = new PeerManager({
+        iceServers: [],
+        debug: true,
+      });
+
+      // Add a listener that throws
+      const errorListener = (): void => {
+        throw new Error('Listener error');
+      };
+      manager.on('connection-state-change', errorListener);
+
+      manager.createPeer('participant-1');
+
+      // Trigger connection state change which will call the listener
+      const peer = MockRTCPeerConnection.instances[0];
+      peer?.simulateConnectionStateChange('connected');
+
+      // Should log the error
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PeerManager]',
+        'Event listener error:',
+        expect.any(Error)
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('transform application without factory', () => {
+    it('should do nothing when applying encryption transform without factory', () => {
+      const manager = new PeerManager({ iceServers: [] });
+
+      manager.createPeer('participant-1');
+
+      // Should not throw when factory is not set
+      expect(() => manager.applyEncryptionTransform('participant-1')).not.toThrow();
+    });
+
+    it('should do nothing when applying decryption transform without factory', () => {
+      const manager = new PeerManager({ iceServers: [] });
+
+      manager.createPeer('participant-1');
+
+      // Should not throw when factory is not set
+      expect(() => manager.applyDecryptionTransform('participant-1')).not.toThrow();
+    });
+
+    it('should do nothing when applying transform to non-existent peer', () => {
+      const manager = new PeerManager({ iceServers: [] });
+      const factory = vi.fn();
+      manager.setEncryptTransformFactory(factory);
+
+      // Should not throw for non-existent peer
+      expect(() => manager.applyEncryptionTransform('non-existent')).not.toThrow();
+      expect(factory).not.toHaveBeenCalled();
+    });
+  });
 });

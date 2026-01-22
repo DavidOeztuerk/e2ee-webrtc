@@ -286,6 +286,452 @@ describe('FrameProcessor', () => {
 
       // No key provider set, so no encryption error callback (throws before getting there)
     });
+
+    it('should call error callback with generation on decryption error for missing key', async () => {
+      const errorCallback = vi.fn();
+      processor.onError(errorCallback);
+
+      // Create a frame with generation 5 (no key available)
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 5; // Generation 5
+
+      await processor.decryptFrame(fakeEncrypted);
+
+      expect(errorCallback).toHaveBeenCalledWith({
+        type: 'decryption',
+        message: 'No key for generation 5',
+        recoverable: true,
+        generation: 5,
+      });
+    });
+
+    it('should pass through on encryption error when passThroughWhenNoKey is true', async () => {
+      // Create a processor with a key provider that will cause encryption to fail
+      const failingProcessor = new FrameProcessor({
+        participantId: 'failing-test',
+        passThroughWhenNoKey: true,
+        debug: false,
+      });
+
+      // Mock crypto module to throw error
+      const { encryptFrame: mockEncrypt } = await import('../../../src/core/crypto/aes-gcm');
+      (mockEncrypt as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Encryption failed')
+      );
+
+      // Set up key provider that returns a key
+      const failingKeyProvider: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => null),
+        getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
+      };
+      failingProcessor.setKeyProvider(failingKeyProvider);
+
+      const errorCallback = vi.fn();
+      failingProcessor.onError(errorCallback);
+
+      const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
+      const result = await failingProcessor.encryptFrame(plaintext);
+
+      // Should pass through original data
+      expect(result).toEqual(plaintext);
+      expect(failingProcessor.getStats().encryptionErrors).toBe(1);
+      expect(failingProcessor.getStats().framesPassedThrough).toBe(1);
+      expect(errorCallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'encryption',
+          recoverable: true,
+        })
+      );
+    });
+
+    it('should throw on encryption error when passThroughWhenNoKey is false', async () => {
+      // Create a processor with a key provider that will cause encryption to fail
+      const failingProcessor = new FrameProcessor({
+        participantId: 'failing-test',
+        passThroughWhenNoKey: false,
+        debug: false,
+      });
+
+      // Mock crypto module to throw error
+      const { encryptFrame: mockEncrypt } = await import('../../../src/core/crypto/aes-gcm');
+      (mockEncrypt as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Encryption failed')
+      );
+
+      // Set up key provider that returns a key
+      const failingKeyProvider: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => null),
+        getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
+      };
+      failingProcessor.setKeyProvider(failingKeyProvider);
+
+      const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
+      await expect(failingProcessor.encryptFrame(plaintext)).rejects.toThrow('Encryption failed');
+      expect(failingProcessor.getStats().encryptionErrors).toBe(1);
+    });
+
+    it('should return encrypted data on decryption error when dropOnDecryptionError is false', async () => {
+      const lenientProcessor = new FrameProcessor({
+        participantId: 'lenient-test',
+        dropOnDecryptionError: false,
+        debug: false,
+      });
+
+      // Mock decrypt to throw
+      const { decryptFrame: mockDecrypt } = await import('../../../src/core/crypto/aes-gcm');
+      (mockDecrypt as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Decryption failed')
+      );
+
+      // Set up key provider
+      const keyProvider: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
+      };
+      lenientProcessor.setKeyProvider(keyProvider);
+
+      const errorCallback = vi.fn();
+      lenientProcessor.onError(errorCallback);
+
+      // Create a valid encrypted frame
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 0; // Generation 0
+
+      const result = await lenientProcessor.decryptFrame(fakeEncrypted);
+
+      // Should return the original encrypted data
+      expect(result).toEqual(fakeEncrypted);
+      expect(lenientProcessor.getStats().decryptionErrors).toBe(1);
+      expect(errorCallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'decryption',
+          recoverable: true,
+        })
+      );
+    });
+
+    it('should return null on decryption error when dropOnDecryptionError is true', async () => {
+      const strictProcessor = new FrameProcessor({
+        participantId: 'strict-test',
+        dropOnDecryptionError: true,
+        debug: false,
+      });
+
+      // Mock decrypt to throw
+      const { decryptFrame: mockDecrypt } = await import('../../../src/core/crypto/aes-gcm');
+      (mockDecrypt as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Decryption failed')
+      );
+
+      // Set up key provider
+      const keyProvider: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
+      };
+      strictProcessor.setKeyProvider(keyProvider);
+
+      // Create a valid encrypted frame
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 0; // Generation 0
+
+      const result = await strictProcessor.decryptFrame(fakeEncrypted);
+
+      // Should return null (drop the frame)
+      expect(result).toBeNull();
+      expect(strictProcessor.getStats().decryptionErrors).toBe(1);
+    });
+  });
+
+  describe('debug logging', () => {
+    it('should log when debug is enabled', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const debugProcessor = new FrameProcessor({
+        participantId: 'debug-test',
+        debug: true,
+      });
+
+      // Create a frame with no key to trigger the missing key log
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 5; // Generation 5 (no key)
+
+      // Set up key provider that returns null for generation 5
+      const keyProvider: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => null),
+        getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
+      };
+      debugProcessor.setKeyProvider(keyProvider);
+
+      await debugProcessor.decryptFrame(fakeEncrypted);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[FrameProcessor debug-test]'),
+        expect.stringContaining('No key for generation 5')
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should not log when debug is disabled', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const quietProcessor = new FrameProcessor({
+        participantId: 'quiet-test',
+        debug: false,
+      });
+
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 5;
+
+      const keyProvider: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => null),
+        getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
+      };
+      quietProcessor.setKeyProvider(keyProvider);
+
+      await quietProcessor.decryptFrame(fakeEncrypted);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('transform streams', () => {
+    it('should encrypt frames through createEncryptTransform', async () => {
+      const transform = processor.createEncryptTransform();
+      const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
+      const results: Uint8Array[] = [];
+
+      // Use pipeTo to properly handle the async transform
+      const sourceStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(plaintext);
+          controller.close();
+        },
+      });
+
+      const collectStream = new WritableStream<Uint8Array>({
+        write(chunk) {
+          results.push(chunk);
+        },
+      });
+
+      await sourceStream.pipeThrough(transform).pipeTo(collectStream);
+
+      expect(results.length).toBe(1);
+      expect(results[0].length).toBeGreaterThan(plaintext.length);
+    });
+
+    it('should pass through on encrypt transform error', async () => {
+      const { encryptFrame: mockEncrypt } = await import('../../../src/core/crypto/aes-gcm');
+      (mockEncrypt as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Transform error'));
+
+      const transform = processor.createEncryptTransform();
+      const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
+      const results: Uint8Array[] = [];
+
+      const sourceStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(plaintext);
+          controller.close();
+        },
+      });
+
+      const collectStream = new WritableStream<Uint8Array>({
+        write(chunk) {
+          results.push(chunk);
+        },
+      });
+
+      await sourceStream.pipeThrough(transform).pipeTo(collectStream);
+
+      // Should pass through the original frame on error
+      expect(results.length).toBe(1);
+      expect(results[0]).toEqual(plaintext);
+    });
+
+    it('should decrypt frames through createDecryptTransform', async () => {
+      // First encrypt a frame
+      const plaintext = new Uint8Array([1, 2, 3, 4, 5]);
+      const encrypted = await processor.encryptFrame(plaintext);
+
+      // Then decrypt it
+      const transform = processor.createDecryptTransform();
+      const results: Uint8Array[] = [];
+
+      const sourceStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encrypted);
+          controller.close();
+        },
+      });
+
+      const collectStream = new WritableStream<Uint8Array>({
+        write(chunk) {
+          results.push(chunk);
+        },
+      });
+
+      await sourceStream.pipeThrough(transform).pipeTo(collectStream);
+
+      expect(results.length).toBe(1);
+      expect(results[0].length).toBe(plaintext.length);
+    });
+
+    it('should drop frames on decrypt transform error', async () => {
+      const { decryptFrame: mockDecrypt } = await import('../../../src/core/crypto/aes-gcm');
+      (mockDecrypt as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Transform error'));
+
+      // When decryptFrame fails, it's caught inside decryptFrame and returns null
+      // The transform then drops the frame (doesn't enqueue)
+      const transform = processor.createDecryptTransform();
+
+      // Create a valid encrypted frame
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 0; // Generation 0
+
+      const results: Uint8Array[] = [];
+
+      const sourceStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(fakeEncrypted);
+          controller.close();
+        },
+      });
+
+      const collectStream = new WritableStream<Uint8Array>({
+        write(chunk) {
+          results.push(chunk);
+        },
+      });
+
+      await sourceStream.pipeThrough(transform).pipeTo(collectStream);
+
+      // Frame should be dropped (decryptFrame returns null on error with dropOnDecryptionError=true)
+      expect(results.length).toBe(0);
+      expect(processor.getStats().decryptionErrors).toBe(1);
+    });
+
+    it('should log and drop frame on unexpected transform error', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const debugProcessor = new FrameProcessor({
+        participantId: 'debug',
+        debug: true,
+      });
+
+      // Mock decryptFrame to throw an unexpected error (not caught internally)
+      const originalDecryptFrame = debugProcessor.decryptFrame.bind(debugProcessor);
+      debugProcessor.decryptFrame = vi.fn().mockRejectedValueOnce(new Error('Unexpected error'));
+
+      debugProcessor.setKeyProvider(mockKeyProvider);
+
+      const transform = debugProcessor.createDecryptTransform();
+
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 0;
+
+      const results: Uint8Array[] = [];
+
+      const sourceStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(fakeEncrypted);
+          controller.close();
+        },
+      });
+
+      const collectStream = new WritableStream<Uint8Array>({
+        write(chunk) {
+          results.push(chunk);
+        },
+      });
+
+      await sourceStream.pipeThrough(transform).pipeTo(collectStream);
+
+      // Frame should be dropped
+      expect(results.length).toBe(0);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[FrameProcessor debug]'),
+        'Decrypt transform error:',
+        expect.any(Error)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle null return from decryptFrame in transform', async () => {
+      const processor2 = new FrameProcessor({
+        participantId: 'test2',
+        debug: false,
+      });
+
+      // Set up key provider that returns null for unknown generations
+      const keyProvider2: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => null), // Always return null
+        getCurrentGeneration: vi.fn(() => 0 as KeyGeneration),
+      };
+      processor2.setKeyProvider(keyProvider2);
+
+      const transform = processor2.createDecryptTransform();
+
+      // Frame with unknown generation - will return null from decryptFrame
+      const fakeEncrypted = new Uint8Array(MIN_ENCRYPTED_SIZE + 10);
+      fakeEncrypted[0] = 99; // Unknown generation
+
+      const results: Uint8Array[] = [];
+
+      const sourceStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(fakeEncrypted);
+          controller.close();
+        },
+      });
+
+      const collectStream = new WritableStream<Uint8Array>({
+        write(chunk) {
+          results.push(chunk);
+        },
+      });
+
+      await sourceStream.pipeThrough(transform).pipeTo(collectStream);
+
+      // Frame should be dropped (null was returned)
+      expect(results.length).toBe(0);
+    });
+  });
+
+  describe('resetStats with keyProvider', () => {
+    it('should restore currentGeneration from keyProvider after reset', async () => {
+      // Set key provider with generation 5
+      const keyProvider5: KeyProvider = {
+        getEncryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getDecryptionKey: vi.fn(() => ({}) as CryptoKey),
+        getCurrentGeneration: vi.fn(() => 5 as KeyGeneration),
+      };
+      processor.setKeyProvider(keyProvider5);
+
+      // Stats should show generation 5
+      expect(processor.getStats().currentGeneration).toBe(5);
+
+      // Do some operations
+      const plaintext = new Uint8Array([1, 2, 3]);
+      await processor.encryptFrame(plaintext);
+
+      // Reset stats
+      processor.resetStats();
+
+      // Should still have generation from key provider
+      expect(processor.getStats().currentGeneration).toBe(5);
+    });
   });
 
   describe('constants', () => {

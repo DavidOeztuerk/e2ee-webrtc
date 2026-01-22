@@ -11,6 +11,7 @@ import {
   importPublicKey,
   computeFingerprint,
   formatFingerprint,
+  deriveEncryptionKey,
 } from '@core/crypto/ecdh';
 
 describe('ECDH Key Exchange Module', () => {
@@ -251,6 +252,126 @@ describe('ECDH Key Exchange Module', () => {
       const formatted2 = formatFingerprint(fingerprint);
 
       expect(formatted1).toBe(formatted2);
+    });
+  });
+
+  // =========================================================================
+  // deriveEncryptionKey Tests
+  // =========================================================================
+  describe('deriveEncryptionKey', () => {
+    it('should derive an AES-GCM-256 key from shared secret', async () => {
+      const aliceKeyPair = await generateKeyPair();
+      const bobKeyPair = await generateKeyPair();
+
+      const sharedSecret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
+      const encryptionKey = await deriveEncryptionKey(sharedSecret);
+
+      expect(encryptionKey).toBeDefined();
+      expect(encryptionKey.algorithm.name).toBe('AES-GCM');
+      expect((encryptionKey.algorithm as AesKeyGenParams).length).toBe(256);
+    });
+
+    it('should derive same key from same shared secret', async () => {
+      const aliceKeyPair = await generateKeyPair();
+      const bobKeyPair = await generateKeyPair();
+
+      const sharedSecret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
+
+      const key1 = await deriveEncryptionKey(sharedSecret);
+      const key2 = await deriveEncryptionKey(sharedSecret);
+
+      // Export both keys to compare
+      const exported1 = await crypto.subtle.exportKey('raw', key1);
+      const exported2 = await crypto.subtle.exportKey('raw', key2);
+
+      expect(Array.from(new Uint8Array(exported1))).toEqual(Array.from(new Uint8Array(exported2)));
+    });
+
+    it('should derive different keys with different info', async () => {
+      const aliceKeyPair = await generateKeyPair();
+      const bobKeyPair = await generateKeyPair();
+
+      const sharedSecret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
+
+      const info1 = new TextEncoder().encode('sender');
+      const info2 = new TextEncoder().encode('receiver');
+
+      const key1 = await deriveEncryptionKey(sharedSecret, info1);
+      const key2 = await deriveEncryptionKey(sharedSecret, info2);
+
+      // Export both keys to compare
+      const exported1 = await crypto.subtle.exportKey('raw', key1);
+      const exported2 = await crypto.subtle.exportKey('raw', key2);
+
+      expect(Array.from(new Uint8Array(exported1))).not.toEqual(
+        Array.from(new Uint8Array(exported2))
+      );
+    });
+
+    it('should derive usable encryption key', async () => {
+      const aliceKeyPair = await generateKeyPair();
+      const bobKeyPair = await generateKeyPair();
+
+      const sharedSecret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
+      const encryptionKey = await deriveEncryptionKey(sharedSecret);
+
+      // Try to encrypt/decrypt with the derived key
+      const plaintext = new TextEncoder().encode('Hello, World!');
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+
+      const encrypted = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        encryptionKey,
+        plaintext
+      );
+
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        encryptionKey,
+        encrypted
+      );
+
+      // Compare as arrays
+      const decryptedArray = Array.from(new Uint8Array(decrypted));
+      const plaintextArray = Array.from(plaintext);
+      expect(decryptedArray).toEqual(plaintextArray);
+    });
+
+    it('should have correct key usages', async () => {
+      const aliceKeyPair = await generateKeyPair();
+      const bobKeyPair = await generateKeyPair();
+
+      const sharedSecret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
+      const encryptionKey = await deriveEncryptionKey(sharedSecret);
+
+      expect(encryptionKey.usages).toContain('encrypt');
+      expect(encryptionKey.usages).toContain('decrypt');
+    });
+
+    it('should be extractable', async () => {
+      const aliceKeyPair = await generateKeyPair();
+      const bobKeyPair = await generateKeyPair();
+
+      const sharedSecret = await deriveSharedSecret(aliceKeyPair.privateKey, bobKeyPair.publicKey);
+      const encryptionKey = await deriveEncryptionKey(sharedSecret);
+
+      expect(encryptionKey.extractable).toBe(true);
+    });
+  });
+
+  // =========================================================================
+  // Error Handling Tests
+  // =========================================================================
+  describe('Error Handling', () => {
+    it('should throw E2EEError when importPublicKey fails with valid format but invalid point', async () => {
+      // Create a key that has correct format (65 bytes, starts with 0x04)
+      // but has invalid point data
+      const invalidKey = new Uint8Array(65);
+      invalidKey[0] = 0x04; // Correct prefix
+      // Fill with zeros - this is an invalid point on the P-256 curve
+      // The origin point (0,0) is not on the curve
+
+      await expect(importPublicKey(invalidKey)).rejects.toThrow();
     });
   });
 

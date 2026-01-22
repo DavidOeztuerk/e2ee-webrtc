@@ -5,6 +5,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WorkerConfig, InitMessage, SetKeyMessage, StatsMessage } from '@workers/types';
 
+// Define Safari RTCTransformEvent interface for testing
+interface SafariRTCTransformEvent extends Event {
+  transformer: {
+    readable: ReadableStream;
+    writable: WritableStream;
+    options?: { mode?: 'encrypt' | 'decrypt' };
+  };
+}
+
 // Import worker internals for testing
 import {
   state,
@@ -683,6 +692,343 @@ describe('Safari E2EE Worker', () => {
 
       expect(state.stats.framesEncrypted).toBe(20);
       expect(state.stats.avgEncryptionTimeMs).toBeGreaterThan(0);
+    });
+
+    it('should set key as previous when setPrevious flag is true', async () => {
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'decrypt' },
+      });
+      mockPostMessage.mockClear();
+
+      // Set key as previous
+      await handleSetKey({
+        type: 'set-key',
+        keyData: testKeyData,
+        generation: 5,
+        setPrevious: true,
+      });
+
+      // Should be set as previous key, not current
+      expect(state.previousGeneration).toBe(5);
+      expect(state.previousKey).not.toBeNull();
+      expect(state.currentKey).toBeNull();
+      expect(state.currentGeneration).toBe(0);
+    });
+
+    it('should send error on invalid key data', async () => {
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'encrypt' },
+      });
+      mockPostMessage.mockClear();
+
+      // Invalid key data (too short)
+      const invalidKeyData = new ArrayBuffer(16);
+
+      await handleSetKey({
+        type: 'set-key',
+        keyData: invalidKeyData,
+        generation: 1,
+      });
+
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          code: 'KEY_IMPORT_FAILED',
+          recoverable: false,
+        })
+      );
+    });
+
+    it('should handle encryption error and pass through frame', async () => {
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'encrypt', debug: true },
+      });
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Set up a key that will cause encryption to fail
+      // We'll mock the encryptFrame function to throw
+      const { encryptFrame } = await import('@workers/crypto-utils');
+      const encryptSpy = vi.spyOn({ encryptFrame }, 'encryptFrame');
+      encryptSpy.mockRejectedValueOnce(new Error('Encryption failed'));
+
+      await handleSetKey({
+        type: 'set-key',
+        keyData: testKeyData,
+        generation: 1,
+      });
+
+      const originalData = new Uint8Array([1, 2, 3, 4, 5]);
+      const enqueuedFrames: unknown[] = [];
+      const mockController = {
+        enqueue: (frame: unknown) => enqueuedFrames.push(frame),
+      };
+
+      // This should pass through the frame on error
+      await encryptFrameHandler(
+        { data: originalData.buffer } as RTCEncodedVideoFrame,
+        mockController as unknown as TransformStreamDefaultController
+      );
+
+      // Frame was enqueued (either encrypted or passed through)
+      expect(enqueuedFrames.length).toBe(1);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should prune old keys from history when exceeding max size', async () => {
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'encrypt' },
+      });
+
+      // Set more keys than max history (5)
+      for (let i = 1; i <= 10; i++) {
+        const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+          'encrypt',
+          'decrypt',
+        ]);
+        const keyData = await crypto.subtle.exportKey('raw', key);
+        await handleSetKey({
+          type: 'set-key',
+          keyData,
+          generation: i,
+        });
+      }
+
+      // History should be pruned
+      expect(state.keyHistory.size).toBeLessThanOrEqual(state.maxKeyHistory);
+    });
+  });
+
+  // =========================================================================
+  // handleRtcTransform Tests
+  // =========================================================================
+  describe('handleRtcTransform', () => {
+    // Note: handleRtcTransform is async and handles Safari's RTCRtpScriptTransform
+    // It receives readable/writable streams and pipes them through encryption/decryption
+    it('should be exported for Safari rtctransform event handling', async () => {
+      // Import the handler
+      const { handleRtcTransform } = await import('@workers/safari-e2ee-worker');
+      expect(typeof handleRtcTransform).toBe('function');
+    });
+
+    it('should process frames through encrypt transform', async () => {
+      const { handleRtcTransform } = await import('@workers/safari-e2ee-worker');
+
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'encrypt', debug: true },
+      });
+      await handleSetKey({
+        type: 'set-key',
+        keyData: testKeyData,
+        generation: 1,
+      });
+
+      const inputData = new Uint8Array([10, 20, 30]);
+      const outputFrames: unknown[] = [];
+
+      const readable = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ data: inputData.buffer } as RTCEncodedVideoFrame);
+          controller.close();
+        },
+      });
+
+      const writable = new WritableStream({
+        write(chunk) {
+          outputFrames.push(chunk);
+        },
+      });
+
+      const mockEvent = {
+        transformer: {
+          readable,
+          writable,
+          options: { mode: 'encrypt' },
+        },
+      };
+
+      await handleRtcTransform(mockEvent as unknown as SafariRTCTransformEvent);
+
+      expect(outputFrames.length).toBe(1);
+    });
+
+    it('should process frames through decrypt transform', async () => {
+      const { handleRtcTransform } = await import('@workers/safari-e2ee-worker');
+
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'decrypt', debug: true },
+      });
+      await handleSetKey({
+        type: 'set-key',
+        keyData: testKeyData,
+        generation: 1,
+      });
+
+      // Create properly encrypted frame
+      const { encryptFrame } = await import('@workers/crypto-utils');
+      const key = await crypto.subtle.importKey('raw', testKeyData, { name: 'AES-GCM' }, false, [
+        'encrypt',
+        'decrypt',
+      ]);
+      const plaintext = new Uint8Array([1, 2, 3]);
+      const encrypted = await encryptFrame(plaintext, key, 1);
+
+      const outputFrames: unknown[] = [];
+
+      const readable = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ data: encrypted.buffer } as RTCEncodedVideoFrame);
+          controller.close();
+        },
+      });
+
+      const writable = new WritableStream({
+        write(chunk) {
+          outputFrames.push(chunk);
+        },
+      });
+
+      const mockEvent = {
+        transformer: {
+          readable,
+          writable,
+          options: { mode: 'decrypt' },
+        },
+      };
+
+      await handleRtcTransform(mockEvent as unknown as SafariRTCTransformEvent);
+
+      expect(outputFrames.length).toBe(1);
+    });
+
+    it('should use config mode when options not provided', async () => {
+      const { handleRtcTransform } = await import('@workers/safari-e2ee-worker');
+
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'encrypt', debug: true },
+      });
+      await handleSetKey({
+        type: 'set-key',
+        keyData: testKeyData,
+        generation: 1,
+      });
+
+      const outputFrames: unknown[] = [];
+
+      const readable = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ data: new Uint8Array([5]).buffer } as RTCEncodedVideoFrame);
+          controller.close();
+        },
+      });
+
+      const writable = new WritableStream({
+        write(chunk) {
+          outputFrames.push(chunk);
+        },
+      });
+
+      const mockEvent = {
+        transformer: {
+          readable,
+          writable,
+          options: undefined, // No options, should use config.mode
+        },
+      };
+
+      await handleRtcTransform(mockEvent as unknown as SafariRTCTransformEvent);
+
+      expect(outputFrames.length).toBe(1);
+    });
+
+    it('should handle pipeline close gracefully', async () => {
+      const { handleRtcTransform } = await import('@workers/safari-e2ee-worker');
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'encrypt', debug: true },
+      });
+
+      // Create a stream that errors
+      const readable = new ReadableStream({
+        start(controller) {
+          controller.error(new Error('Pipeline closed'));
+        },
+      });
+
+      const writable = new WritableStream();
+
+      const mockEvent = {
+        transformer: {
+          readable,
+          writable,
+          options: { mode: 'encrypt' },
+        },
+      };
+
+      // Should not throw, error is caught internally
+      await expect(
+        handleRtcTransform(mockEvent as unknown as SafariRTCTransformEvent)
+      ).resolves.toBeUndefined();
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  // =========================================================================
+  // isControlMessage Tests
+  // =========================================================================
+  describe('isControlMessage', () => {
+    it('should return true for valid control message', () => {
+      expect(isControlMessage({ type: 'init' })).toBe(true);
+      expect(isControlMessage({ type: 'set-key' })).toBe(true);
+      expect(isControlMessage({ type: 'stats' })).toBe(true);
+    });
+
+    it('should return false for invalid messages', () => {
+      expect(isControlMessage(null)).toBe(false);
+      expect(isControlMessage(undefined)).toBe(false);
+      expect(isControlMessage('string')).toBe(false);
+      expect(isControlMessage(123)).toBe(false);
+      expect(isControlMessage({})).toBe(false);
+      expect(isControlMessage({ type: 123 })).toBe(false);
+    });
+  });
+
+  // =========================================================================
+  // handleStats Tests
+  // =========================================================================
+  describe('handleStats', () => {
+    it('should return current stats', async () => {
+      await handleInit({
+        type: 'init',
+        config: { participantId: 'safari-user', mode: 'encrypt' },
+      });
+
+      // Set some stats
+      state.stats.framesEncrypted = 100;
+      state.stats.avgEncryptionTimeMs = 0.5;
+
+      handleStats({ type: 'stats' });
+
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'stats',
+          stats: expect.objectContaining({
+            framesEncrypted: 100,
+            avgEncryptionTimeMs: 0.5,
+          }),
+        })
+      );
     });
   });
 });

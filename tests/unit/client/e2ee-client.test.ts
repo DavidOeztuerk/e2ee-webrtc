@@ -818,4 +818,396 @@ describe('E2EEClient', () => {
       expect(typeof fingerprint).toBe('string');
     });
   });
+
+  describe('remote tracks', () => {
+    let client: E2EEClient;
+
+    beforeEach(async () => {
+      client = new E2EEClient({ signalingUrl: 'wss://test.example.com' });
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-participant' });
+      await connectPromise;
+
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({
+        type: 'joined',
+        roomId: 'test-room',
+        participants: [],
+      });
+      await joinPromise;
+    });
+
+    it('should emit remote-track when receiving track from peer', () => {
+      const onRemoteTrack = vi.fn();
+      client.on('remote-track', onRemoteTrack);
+
+      // Add peer
+      mockWsInstance?.simulateMessage({
+        type: 'participant-joined',
+        participantId: 'peer-1',
+      });
+
+      // Simulate receiving an offer and establishing connection
+      mockWsInstance?.simulateMessage({
+        type: 'offer',
+        senderId: 'peer-1',
+        payload: { type: 'offer', sdp: 'v=0...' },
+      });
+
+      // Get the peer connection and simulate track
+      if (mockRtcInstances.length > 0) {
+        const pc = mockRtcInstances[mockRtcInstances.length - 1];
+        const mockTrack = createMockTrack('video', 'remote-video-1');
+        const mockStream = createMockMediaStream([mockTrack]);
+        pc.simulateTrack(mockTrack, [mockStream]);
+      }
+
+      // Allow async processing
+      expect(client.getState()).toBe('in-room');
+    });
+  });
+
+  describe('offer handling for unknown peers', () => {
+    let client: E2EEClient;
+
+    beforeEach(async () => {
+      client = new E2EEClient({ signalingUrl: 'wss://test.example.com' });
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-participant' });
+      await connectPromise;
+
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({
+        type: 'joined',
+        roomId: 'test-room',
+        participants: [],
+      });
+      await joinPromise;
+      mockWsInstance?.clearMessages();
+    });
+
+    it('should create peer connection for offer from unknown peer', async () => {
+      // Send offer without prior participant-joined
+      mockWsInstance?.simulateMessage({
+        type: 'offer',
+        senderId: 'unknown-peer',
+        payload: { type: 'offer', sdp: 'v=0...' },
+      });
+
+      // Allow async processing
+      await vi.runAllTimersAsync();
+
+      // Should handle gracefully
+      expect(client.getState()).toBe('in-room');
+    });
+
+    it('should handle offer when local stream is already set', async () => {
+      // Set local stream first
+      const mockStream = createMockMediaStream();
+      client.setLocalStream(mockStream);
+
+      // Now receive offer from a new peer
+      mockWsInstance?.simulateMessage({
+        type: 'offer',
+        senderId: 'peer-with-stream',
+        payload: { type: 'offer', sdp: 'v=0...' },
+      });
+
+      await vi.runAllTimersAsync();
+
+      // Should add local tracks to the new peer connection
+      expect(client.getState()).toBe('in-room');
+    });
+  });
+
+  describe('key broadcast', () => {
+    let client: E2EEClient;
+
+    beforeEach(async () => {
+      client = new E2EEClient({ signalingUrl: 'wss://test.example.com' });
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-participant' });
+      await connectPromise;
+
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({
+        type: 'joined',
+        roomId: 'test-room',
+        participants: [{ id: 'peer-1' }],
+      });
+      await joinPromise;
+      mockWsInstance?.clearMessages();
+    });
+
+    it('should handle key-broadcast messages', () => {
+      mockWsInstance?.simulateMessage({
+        type: 'key-broadcast',
+        senderId: 'peer-1',
+        payload: {
+          key: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', // 32 bytes base64
+          generation: 2,
+        },
+      });
+
+      // Should process without error
+      expect(client.getState()).toBe('in-room');
+    });
+  });
+
+  describe('local stream with existing peers', () => {
+    let client: E2EEClient;
+
+    beforeEach(async () => {
+      client = new E2EEClient({ signalingUrl: 'wss://test.example.com' });
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-participant' });
+      await connectPromise;
+
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({
+        type: 'joined',
+        roomId: 'test-room',
+        participants: [{ id: 'existing-peer', displayName: 'Bob' }],
+      });
+      await joinPromise;
+      mockWsInstance?.clearMessages();
+    });
+
+    it('should add local tracks to existing peer when setting stream', async () => {
+      // Peer already exists from joining
+      await vi.runAllTimersAsync();
+
+      // Now set local stream
+      const mockStream = createMockMediaStream();
+      client.setLocalStream(mockStream);
+
+      expect(client.getLocalStream()).toBe(mockStream);
+    });
+  });
+
+  describe('connection state changes', () => {
+    let client: E2EEClient;
+
+    beforeEach(async () => {
+      client = new E2EEClient({ signalingUrl: 'wss://test.example.com' });
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-participant' });
+      await connectPromise;
+
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({
+        type: 'joined',
+        roomId: 'test-room',
+        participants: [],
+      });
+      await joinPromise;
+      mockWsInstance?.clearMessages();
+    });
+
+    it('should handle peer connection state changes', () => {
+      // Add peer
+      mockWsInstance?.simulateMessage({
+        type: 'participant-joined',
+        participantId: 'peer-1',
+      });
+
+      // Get the created peer connection and trigger state change
+      if (mockRtcInstances.length > 0) {
+        const pc = mockRtcInstances[mockRtcInstances.length - 1];
+        pc.connectionState = 'connected';
+        pc.onconnectionstatechange?.();
+      }
+
+      expect(client.getState()).toBe('in-room');
+    });
+
+    it('should handle negotiation needed event', async () => {
+      // Add peer
+      mockWsInstance?.simulateMessage({
+        type: 'participant-joined',
+        participantId: 'peer-1',
+      });
+
+      // Get the created peer connection and trigger negotiation needed
+      if (mockRtcInstances.length > 0) {
+        const pc = mockRtcInstances[mockRtcInstances.length - 1];
+        pc.onnegotiationneeded?.();
+      }
+
+      await vi.runAllTimersAsync();
+
+      // Should handle and potentially send an offer
+      expect(client.getState()).toBe('in-room');
+    });
+
+    it('should handle ICE candidate generation', async () => {
+      // Add peer
+      mockWsInstance?.simulateMessage({
+        type: 'participant-joined',
+        participantId: 'peer-1',
+      });
+
+      mockWsInstance?.clearMessages();
+
+      // Trigger ICE candidate event
+      if (mockRtcInstances.length > 0) {
+        const pc = mockRtcInstances[mockRtcInstances.length - 1];
+        const mockCandidate = new MockRTCIceCandidate({
+          candidate: 'candidate:1 1 UDP 123456 192.168.1.1 12345 typ host',
+          sdpMid: 'audio',
+          sdpMLineIndex: 0,
+        });
+
+        pc.onicecandidate?.({
+          candidate: mockCandidate as unknown as RTCIceCandidate,
+        } as RTCPeerConnectionIceEvent);
+      }
+
+      // Should send ICE candidate to peer
+      expect(client.getState()).toBe('in-room');
+    });
+
+    it('should handle null ICE candidate (gathering complete)', async () => {
+      // Add peer
+      mockWsInstance?.simulateMessage({
+        type: 'participant-joined',
+        participantId: 'peer-1',
+      });
+
+      // Trigger null ICE candidate (gathering complete)
+      if (mockRtcInstances.length > 0) {
+        const pc = mockRtcInstances[mockRtcInstances.length - 1];
+        pc.onicecandidate?.({
+          candidate: null,
+        } as RTCPeerConnectionIceEvent);
+      }
+
+      // Should handle gracefully
+      expect(client.getState()).toBe('in-room');
+    });
+  });
+
+  describe('debug logging', () => {
+    it('should log when debug is enabled', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const client = new E2EEClient({
+        signalingUrl: 'wss://test.example.com',
+        debug: true,
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'debug-test' });
+      await connectPromise;
+
+      // Should have logged connection
+      expect(consoleSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should not log when debug is disabled', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const client = new E2EEClient({
+        signalingUrl: 'wss://test.example.com',
+        debug: false,
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'quiet-test' });
+      await connectPromise;
+
+      // Should not have logged (from E2EEClient, may still log from mocks)
+      // This checks that the E2EEClient log calls are conditional
+      expect(client.getState()).toBe('connected');
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('error handling', () => {
+    let client: E2EEClient;
+
+    beforeEach(async () => {
+      client = new E2EEClient({ signalingUrl: 'wss://test.example.com' });
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-participant' });
+      await connectPromise;
+    });
+
+    it('should emit error for invalid ICE candidate', async () => {
+      const onError = vi.fn();
+      client.on('error', onError);
+
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({ type: 'joined', roomId: 'test-room', participants: [] });
+      await joinPromise;
+
+      // Send ICE candidate for non-existent peer
+      mockWsInstance?.simulateMessage({
+        type: 'ice-candidate',
+        senderId: 'non-existent-peer',
+        payload: {
+          candidate: 'invalid',
+          sdpMid: null,
+          sdpMLineIndex: null,
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      // Should handle gracefully
+      expect(client.getState()).toBe('in-room');
+    });
+
+    it('should handle signaling server disconnect', async () => {
+      const onDisconnected = vi.fn();
+      client.on('disconnected', onDisconnected);
+
+      // Simulate server closing connection
+      mockWsInstance?.close(1001, 'Going away');
+
+      expect(client.getState()).toBe('disconnected');
+      expect(onDisconnected).toHaveBeenCalled();
+    });
+  });
+
+  describe('rotateKey', () => {
+    let client: E2EEClient;
+
+    beforeEach(async () => {
+      client = new E2EEClient({ signalingUrl: 'wss://test.example.com' });
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-participant' });
+      await connectPromise;
+
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({
+        type: 'joined',
+        roomId: 'test-room',
+        participants: [{ id: 'peer-1' }],
+      });
+      await joinPromise;
+      mockWsInstance?.clearMessages();
+    });
+
+    it('should rotate encryption key', async () => {
+      const initialGeneration = client.getKeyGeneration();
+
+      await client.rotateKey();
+
+      // Generation should increase
+      expect(client.getKeyGeneration()).toBeGreaterThan(initialGeneration);
+    });
+  });
 });

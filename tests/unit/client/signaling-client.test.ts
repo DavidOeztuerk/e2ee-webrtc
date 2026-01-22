@@ -737,5 +737,291 @@ describe('SignalingClient', () => {
 
       expect(client.isConnected()).toBe(false);
     });
+
+    it('should clear reconnect timer on disconnect', async () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        reconnect: { enabled: true, maxAttempts: 3, delayMs: 100 },
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Trigger reconnect attempt
+      mockWsInstance?.simulateClose(1006, 'Connection lost');
+
+      // Now disconnect before reconnect timer fires
+      client.disconnect();
+
+      // Advance time past reconnect delay
+      vi.advanceTimersByTime(500);
+
+      // Should stay disconnected
+      expect(client.isConnected()).toBe(false);
+      expect(client.getConnectionState()).toBe('disconnected');
+    });
+  });
+
+  describe('error handling', () => {
+    it('should throw when sending without connection', async () => {
+      const client = new SignalingClient({ url: 'wss://test.example.com' });
+
+      expect(() => client.sendOffer('peer-1', { type: 'offer', sdp: 'test' })).toThrow(
+        'Not connected'
+      );
+    });
+
+    it('should throw when broadcasting key without connection', async () => {
+      const client = new SignalingClient({ url: 'wss://test.example.com' });
+
+      expect(() => client.broadcastKey({ key: 'test', generation: 1 })).toThrow('Not connected');
+    });
+
+    it('should handle listener errors gracefully', async () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        debug: true,
+      });
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const badHandler = vi.fn(() => {
+        throw new Error('Handler error');
+      });
+      const goodHandler = vi.fn();
+
+      client.on('participant-joined', badHandler);
+      client.on('participant-joined', goodHandler);
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // This should not throw and should still call good handler
+      mockWsInstance?.simulateMessage({
+        type: 'participant-joined',
+        participantId: 'peer-1',
+      });
+
+      expect(badHandler).toHaveBeenCalled();
+      expect(goodHandler).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('advanced reconnection', () => {
+    it('should handle reconnection failure and retry', async () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        reconnect: { enabled: true, maxAttempts: 3, delayMs: 100 },
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Simulate unexpected disconnect
+      mockWsInstance?.simulateClose(1006, 'Connection lost');
+
+      // First reconnect attempt
+      vi.advanceTimersByTime(100);
+
+      // Simulate failed reconnect
+      mockWsInstance?.simulateError();
+
+      // Should schedule another attempt
+      vi.advanceTimersByTime(200);
+
+      // Client should still be trying to reconnect
+      expect(client.getConnectionState()).toBe('disconnected');
+    });
+
+    it('should rejoin room after successful reconnection', async () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        reconnect: { enabled: true, maxAttempts: 3, delayMs: 100 },
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Join a room
+      const joinPromise = client.joinRoom('test-room');
+      mockWsInstance?.simulateMessage({
+        type: 'joined',
+        roomId: 'test-room',
+        participants: [],
+      });
+      await joinPromise;
+
+      expect(client.getCurrentRoomId()).toBe('test-room');
+
+      // Simulate disconnect
+      mockWsInstance?.simulateClose(1006, 'Connection lost');
+
+      // Advance time for reconnection
+      vi.advanceTimersByTime(100);
+
+      // Simulate successful reconnection
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test-2' });
+
+      // Should try to rejoin room (auto-rejoin logic)
+      await vi.runAllTimersAsync();
+    });
+
+    it('should give up after max reconnection attempts', async () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        reconnect: { enabled: true, maxAttempts: 2, delayMs: 100 },
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Simulate disconnect
+      mockWsInstance?.simulateClose(1006, 'Connection lost');
+
+      // First attempt
+      vi.advanceTimersByTime(100);
+      mockWsInstance?.simulateError();
+
+      // Second attempt
+      vi.advanceTimersByTime(200);
+      mockWsInstance?.simulateError();
+
+      // Third attempt (should not happen, max is 2)
+      vi.advanceTimersByTime(600);
+
+      // Should be disconnected
+      expect(client.getConnectionState()).toBe('disconnected');
+    });
+  });
+
+  describe('debug logging', () => {
+    it('should log when debug is enabled', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        debug: true,
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'debug-test' });
+      await connectPromise;
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle malformed message gracefully', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        debug: true,
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Send invalid JSON
+      mockWsInstance?.onmessage?.({ data: 'not valid json {{{' });
+
+      // Should log error and continue
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[SignalingClient]'),
+        'Failed to parse message:',
+        'not valid json {{{'
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle unknown message types', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        debug: true,
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Send unknown message type
+      mockWsInstance?.simulateMessage({ type: 'unknown-type-xyz', data: {} });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[SignalingClient]'),
+        'Unknown message type:',
+        'unknown-type-xyz'
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle pong message silently', async () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+        debug: true,
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Pong message should be processed without error
+      expect(() => {
+        mockWsInstance?.simulateMessage({ type: 'pong' });
+      }).not.toThrow();
+    });
+  });
+
+  describe('send error handling', () => {
+    it('should throw when sending without connection', () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+      });
+
+      // Try to send offer without connecting
+      expect(() => client.sendOffer('target-1', { type: 'offer', sdp: 'v=0...' })).toThrow(
+        'Not connected'
+      );
+    });
+
+    it('should throw when WebSocket is in closing state', async () => {
+      const client = new SignalingClient({
+        url: 'wss://test.example.com',
+      });
+
+      const connectPromise = client.connect();
+      mockWsInstance?.simulateOpen();
+      mockWsInstance?.simulateMessage({ type: 'welcome', participantId: 'test' });
+      await connectPromise;
+
+      // Simulate WebSocket in closing state
+      if (mockWsInstance) {
+        mockWsInstance.readyState = WebSocket.CLOSING;
+      }
+
+      expect(() => client.sendOffer('target-1', { type: 'offer', sdp: 'v=0...' })).toThrow();
+    });
   });
 });
