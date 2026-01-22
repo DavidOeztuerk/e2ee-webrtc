@@ -123,13 +123,10 @@ describe('Browser Detection Module', () => {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       );
 
-      // Mock RTCRtpSender with createEncodedStreams
-      vi.stubGlobal(
-        'RTCRtpSender',
-        class {
-          static prototype = { createEncodedStreams: () => {} };
-        }
-      );
+      // Mock RTCRtpSender with createEncodedStreams on prototype
+      function MockRTCRtpSender() {}
+      MockRTCRtpSender.prototype.createEncodedStreams = () => ({});
+      vi.stubGlobal('RTCRtpSender', MockRTCRtpSender);
 
       const capabilities = detectCapabilities();
 
@@ -295,12 +292,9 @@ describe('Browser Detection Module', () => {
       );
 
       // Mock support
-      vi.stubGlobal(
-        'RTCRtpSender',
-        class {
-          static prototype = { createEncodedStreams: () => {} };
-        }
-      );
+      function MockRTCRtpSender() {}
+      MockRTCRtpSender.prototype.createEncodedStreams = () => ({});
+      vi.stubGlobal('RTCRtpSender', MockRTCRtpSender);
       vi.stubGlobal('Worker', class {});
 
       expect(isE2EESupported()).toBe(true);

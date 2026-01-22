@@ -132,7 +132,7 @@ describe('AES-GCM Crypto Module', () => {
     });
 
     it('should encrypt large frames (video keyframe)', async () => {
-      const plaintext = new Uint8Array(100000); // 100KB frame
+      const plaintext = new Uint8Array(60000); // 60KB frame (jsdom limit is 65KB)
       crypto.getRandomValues(plaintext);
 
       const encrypted = await encryptFrame(plaintext, key, generation);
@@ -191,7 +191,7 @@ describe('AES-GCM Crypto Module', () => {
     });
 
     it('should decrypt large frames', async () => {
-      const plaintext = new Uint8Array(100000);
+      const plaintext = new Uint8Array(60000); // 60KB (jsdom limit is 65KB)
       crypto.getRandomValues(plaintext);
 
       const encrypted = await encryptFrame(plaintext, key, generation);

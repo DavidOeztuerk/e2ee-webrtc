@@ -301,11 +301,8 @@ describe('Key Manager Module', () => {
       await autoRotateManager.generateKey();
       const initialGeneration = autoRotateManager.getState().currentGeneration;
 
-      // Fast-forward time
-      vi.advanceTimersByTime(1100);
-
-      // Wait for async rotation
-      await vi.runAllTimersAsync();
+      // Fast-forward time by exactly 1100ms (avoid infinite loop from runAllTimersAsync)
+      await vi.advanceTimersByTimeAsync(1100);
 
       expect(autoRotateManager.getState().currentGeneration).toBeGreaterThan(initialGeneration);
 
@@ -328,8 +325,8 @@ describe('Key Manager Module', () => {
 
       autoRotateManager.destroy();
 
-      vi.advanceTimersByTime(5000);
-      await vi.runAllTimersAsync();
+      // After destroy, no timers should fire
+      await vi.advanceTimersByTimeAsync(5000);
 
       expect(handler).not.toHaveBeenCalled();
 
